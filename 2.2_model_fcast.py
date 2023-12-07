@@ -33,11 +33,11 @@ fname = f"2000-01-01_{today}_dax_returns.csv"
 ret_df = pd.read_csv(f"./data/{fname}", index_col=0)
 ret_df.index = pd.to_datetime(ret_df.index)
 
-ignore_first = 2000
+ignore_first = 5500
 ret_df = ret_df.iloc[ignore_first:]
 
 # train test split
-split_pt = 0.8
+split_pt = 0.9
 train_data = ret_df[:int(len(ret_df) * split_pt)]
 test_data = ret_df[int(len(ret_df) * split_pt):]
 
@@ -60,79 +60,127 @@ arma_garch_search_params = product(p_values, q_values, r_values, s_values)
 # - - - - - - - - - - - - - -
 arma_models = {}
 
+print('# '*15)
+print(f"start auto arima")
+print('# '*15)
+
 for i, ret_horizon in enumerate(train_data.columns):
+    
+    print('= '*15)
+    print(f"start auto arima {ret_horizon}")
+    print('= '*15)
 
     # fit ARIMA models using pmdarima to find best order
-    arma_models[horizon] = pm.auto_arima(train_data[horizon], start_p=1, start_q=1,
-                                         max_p=max_p_q, max_q=max_p_q, trace=True,
-                                         error_action='ignore',
-                                         suppress_warnings=True,
-                                         stepwise=True)
+    arma_models[ret_horizon] = pm.auto_arima(train_data[ret_horizon], start_p=1, start_q=1,
+                                             max_p=max_p_q, max_q=max_p_q, error_action='ignore')
 
 # - - - - - - - - - - - - - -
 arma_garch_models = {}
 
 # fit ARIMA + GARCH models using rpy2
 
-for i, ret_horizon in enumerate(train_data.columns):
+# for i, ret_horizon in enumerate(train_data.columns):
 
-    for i, params in enumerate(arma_garch_search_params):
+#     for i, params in enumerate(arma_garch_search_params):
 
-        mean_model = robjects.ListVector(
-            {'armaOrder': robjects.IntVector([p, q])})
+#         mean_model = robjects.ListVector(
+#             {'armaOrder': robjects.IntVector([p, q])})
 
-        variance_model = robjects.ListVector(
-            {'model': "sGARCH",
-            'garchOrder': robjects.IntVector([arch_p, arch_q])})
+#         variance_model = robjects.ListVector(
+#             {'model': "sGARCH",
+#             'garchOrder': robjects.IntVector([arch_p, arch_q])})
 
-        if dist == 'std':
-            model = rugarch.ugarchspec(variance_model=variance_model, mean_model=mean_model, distribution_model=dist, fixed_pars=r_std_params)
+#         if dist == 'std':
+#             model = rugarch.ugarchspec(variance_model=variance_model, mean_model=mean_model, distribution_model=dist, fixed_pars=r_std_params)
 
-        elif dist == "norm":
-            model = rugarch.ugarchspec(variance_model=variance_model, mean_model=mean_model, distribution_model=dist)
+#         elif dist == "norm":
+#             model = rugarch.ugarchspec(variance_model=variance_model, mean_model=mean_model, distribution_model=dist)
         
-        model_name = f"{ret_horizon}_({p},{q})_({arch_p}, {arch_q})"
-        arima_garch_model[model_name] = rugarch.ugarchfit(spec=model, data=train_data, solver='hybrid', tol=1e-3) 
+#         model_name = f"{ret_horizon}_({p},{q})_({arch_p}, {arch_q})"
+#         arima_garch_model[model_name] = rugarch.ugarchfit(spec=model, data=train_data, solver='hybrid', tol=1e-3) 
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # evaluate models on remaining test set using rolling window fcast
 
-# create results df with:
+# - - - - - - - - - - - - - -
+# arma test set rolling window fcast
 
-    #     model params ie p, q, arch_p, arch_q
-    #     model information criteria
-    #     model log likelihood
+arma_models_eval = arma_models.copy()
+test_data_arma_preds = test_data.copy()
 
-    #     in sample errors: MSE, MAE, MAPE, SMAPE
-    #     out of sample fcast errors: MSE, MAE, MAPE, SMAPE
+print('# '*15)
+print(f"start rolling forecast in test_data for arma models")
+print('# '*15)
 
-results_df = pd.DataFrame(results)
+for ret_horizon, model in arma_models_eval.items():
 
-for model_name, model in arma_models.items():
+    # for each row in test data predict one step ahead return
+    # and update model with new data
+    preds = np.zeros(len(test_data))
+    conf_int = np.zeros((len(test_data), 2))
 
-    fitted_values = model.fittedvalues()
-    error = model.resid()
+    for idx, (timestamp, test_data_row) in enumerate(test_data.iterrows()):
 
-    # rolling window forecast
+        print(f"{idx+1}/{len(test_data)}", end="\r")
+        preds[idx], conf_int[idx] = model.predict(n_periods=1, return_conf_int=True)
 
-    for i in range(len(test_data)):
+        model.update(test_data_row, error_action='ignore')
+        # Internally, this calls fit again 
+        # using the OLD model parameters as the starting parameters for the new model’s MLE computation.
 
-        # fit model on training data
-        model = ARIMA(train_data[:i], order=model['order'])
-        model_fit = model.fit()
 
-        # forecast one step ahead
-        y_hat = model_fit.forecast()[0]
+    test_data_arma_preds[f"{ret_horizon}_arma_pred"] = preds
+    test_data_arma_preds[f"{ret_horizon}_lower_CI"] = conf_int[:, 0]
+    test_data_arma_preds[f"{ret_horizon}_upper_CI"] = conf_int[:, 1]
 
-        # store forecast and ob
-        forecasts.append(yhat)
-        obs.append(test_data[i])
+    print('- '*15)
+    print(f"{ret_horizon} done")
+    print('- '*15)
 
-    results.append({
-        'model': model_name,
-        'order': model['order'],
-        'in_sample_fcast': model['in_sample_fcast'],
-        'errors': errors
-    })
+# - - - - - - - - - - - - - -
+# arma evaluation variables
 
-for model_name, model in arima_garch_model.items():
+arma_results_df = pd.DataFrame()
+
+for ret_horizon in test_data.columns:
+
+    preds = test_data_arma_preds[f"{ret_horizon}_arma_pred"]
+    test_actual = test_data[ret_horizon].values
+    error = test_actual - preds
+
+    MSE = np.mean(error**2)
+    MAE = np.mean(np.abs(error))
+    MAPE = np.mean(np.abs(error) / np.abs(test_actual))
+    SMAPE = np.mean(2 * np.abs(error) / (np.abs(test_actual) + np.abs(preds)))
+
+    arma_model_dict = arma_models_eval[ret_horizon].to_dict()
+    p, d, q = arma_model_dict['order']
+    aic = arma_model_dict['aic']
+    bic = arma_model_dict['bic']
+    loglike = float(arma_models_eval[ret_horizon].summary().as_text().split("Log Likelihood")[1].split("\n")[0].replace(" ", ""))
+
+    # save all results in a dataframe
+    arma_results = pd.DataFrame({'ret_horizon': ret_horizon,
+                                 'p': p,
+                                 'd': d,
+                                 'q': q,
+                                 'aic': aic,
+                                 'bic': bic,
+                                 'loglike': loglike,
+                                 'MSE': MSE,
+                                 'MAE': MAE,
+                                 'MAPE': MAPE,
+                                 'SMAPE': SMAPE}, index=[0])
+    
+    # append to results_df
+    arma_results_df = pd.concat([arma_results_df, arma_results], ignore_index=True)
+
+print('# '*15)
+print(f"results of arma models")
+print('# '*15)
+
+print(arma_results_df)
+
+# - - - - - - - - - - - - - -
+# do the same evaluation for the arma_garch models
+# for model_name, model in arima_garch_model.items():

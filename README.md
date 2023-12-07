@@ -31,8 +31,10 @@ maybe try other variants of GARCH models :
 
 Note that there does not seem to be an option to use SARMA models in the "rugarch" package. 
 But if there is a seasonal pattern (and that is quite likely when it comes to tourist arrivals), you will have to account for it somehow. 
+
 Consider using exogenous seasonal variables (dummies or Fourier terms) in the conditional mean model 
 via the argument external.regressors inside the argument mean.model in function ugarchspec. 
+
 Alternatively, note that a SARMA model corresponds to a restricted ARMA model. 
 An approximation of SARMA could thus be an ARMA with the appropriate lag order but without the SARMA-specific parameter restrictions.
 (see https://stats.stackexchange.com/a/176629/338210)
@@ -47,7 +49,9 @@ A = test residuals from the SARIMA model using ARCH-LM test or some other test f
 
 ARMA alone would explain more variance in sample than ARMA-GARCH 
 (just as OLS would explain more than feasible GLS, regardless of which is closer to the true model in population). 
+
 GARCH would not explain any variance if you leave the conditional mean part empty (without ARMA). 
+
 And if the ARMA-GARCH model approximates the true DGP better than a plain ARMA and plain GARCH, 
 the out of sample performance of ARMA-GARCH will be better -- as long as you can estimate the model sufficiently well. 
 (And since ARMA-GARCH is a richer model than plain ARMA and plain GARCH, you would normally not be able to estimate it as precisely as plain ARMA and plain GARCH on any given dataset.)
@@ -56,6 +60,12 @@ the out of sample performance of ARMA-GARCH will be better -- as long as you can
 = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 
 evaluate models on test set using rolling window fcast
+- either use pmd.autoarima ... update(new_data) to update model and generate next one step ahead prediction
+
+- need to look into how to use pmdarima.model_selection.cross_val_predict + pmdarima.model_selection.SlidingWindowForecastCV / pmdarima.model_selection.RollingForecastCV
+- cross_val_predict = generate cross-validated estimates for each input data point
+- difference between sliding and rolling is simply that the training set does not grow in the sliding forecast method, which is why its called "sliding", since its a constant window size that is shifted forward with new train data available
+
 
 in theory : 
 

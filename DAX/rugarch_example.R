@@ -47,8 +47,24 @@ DAX_returns <- na.omit(DAX_returns)
 # - - - - - - - - - - - - - - - - - - - -
 # first test
 
+set.seed(123)
+
+n <- 100
+data <- arima.sim(model = list(ar=0.9), n = n) + rnorm(n) 
+trend <- seq(from=1,to=10,length.out=n)
+data <- data + trend
+plot(data)
+
 spec = ugarchspec() # by default arma(1,1) and garch(1,1)
-fit = ugarchfit(data = DAX_returns[,3], spec = spec)
+fit_mean = ugarchfit(data = data, spec = spec)
+
+spec = ugarchspec(variance.model = list(external.regressors = trend),
+                  mean.model = list(include.mean = FALSE)) # by default arma(1,1) and garch(1,1)
+fit_no_mean = ugarchfit(data = data, spec = spec)
+
+plot(data, type='l')
+lines(coredata(fitted(fit_mean)), col='red')
+lines(coredata(fitted(fit_no_mean)), col='blue')
 
 # - - - - - - - - - - - - - - - - - - - -
 
