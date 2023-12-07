@@ -11,7 +11,9 @@ import rpy2.robjects.numpy2ri
 rpy2.robjects.numpy2ri.activate()
 
 def _get_rugarch_model(p: int, q: int, arch_p: int, arch_q: int, dist: str):
-    """ Function to get rugarch model with specified parameters
+
+    """ 
+    Function to get rugarch model with specified parameters
 
     Parameters
     ----------
@@ -25,7 +27,9 @@ def _get_rugarch_model(p: int, q: int, arch_p: int, arch_q: int, dist: str):
     -------
     model: R-ugarchspec
     rugarch: link to library(rugarch)
+
     """
+
     rugarch = rpackages.importr('rugarch')
     variance_model = robjects.ListVector(
         {'model': "sGARCH",
@@ -33,7 +37,8 @@ def _get_rugarch_model(p: int, q: int, arch_p: int, arch_q: int, dist: str):
     mean_model = robjects.ListVector(
         {'armaOrder': robjects.IntVector([p, q]),
          'include.mean': True})
-    #Params auskommentieren für freie Wahl dof und andere dist!!!
+    
+    # Params auskommentieren für freie Wahl dof und andere dist!!!
     if dist == 'std':
         fix_df = 3
 
@@ -49,10 +54,10 @@ def _get_rugarch_model(p: int, q: int, arch_p: int, arch_q: int, dist: str):
 
     return model, rugarch
 
-
 def r_garch_forecast(y: np.ndarray, p: int, q: int, arch_p: int, arch_q: int, dist: str = 'std', external=[]):
-    """ Uses the R function ugarchestimate to (in-sample) forecast timeseries ARMA-GARCH model with estimation
-    on whole data
+
+    """ 
+    Uses the R function ugarchestimate to (in-sample) forecast timeseries ARMA-GARCH model with estimation on whole data
 
         Parameters
         ----------
@@ -77,7 +82,9 @@ def r_garch_forecast(y: np.ndarray, p: int, q: int, arch_p: int, arch_q: int, di
         dict
             Dict with forecasts/realisationen: Mu (predicted mean), Sigma (Predicted variance), PIT (CDF-transform of residuals),
                 Resid (Unexplained error), Resid_std (Resid / Sigma)
+
     """
+
     model, rugarch = _get_rugarch_model(p=p, 
                                         q=q, 
                                         arch_p=arch_p, 
@@ -100,8 +107,6 @@ def r_garch_forecast(y: np.ndarray, p: int, q: int, arch_p: int, arch_q: int, di
     fore= rugarch.ugarchforecast(modelfit)
     sigma=np.asarray(rugarch.sigma(fore))[0]
     mu=np.asarray(rugarch.fitted(fore))[0]
-
-
 
     #raise NotImplementedError('Residual computation überarbeiten!')
     #resid = np.asarray(rugarch.residuals(modelfit))
@@ -150,6 +155,5 @@ def get_q_from_dist(mean, std, q=[0.025, 0.25, 0.5, 0.75, 0.975]):
         quants = t.ppf(q, df=3, loc=mean[i], scale=std[i]+eps)
         quantiles.append(quants)
     return np.array(quantiles)
-
 
 quantiles_val = get_q_from_dist(mean, sigma)
