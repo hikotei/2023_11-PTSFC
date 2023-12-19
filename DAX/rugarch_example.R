@@ -45,21 +45,21 @@ DAX_returns <- na.omit(DAX_returns)
 # rugarch OWN ####
 
 # - - - - - - - - - - - - - - - - - - - -
-# first test
+# testing external regressors and include.mean = FALSE
 
 set.seed(123)
 
 n <- 100
 data <- arima.sim(model = list(ar=0.9), n = n) + rnorm(n) 
 trend <- seq(from=1,to=10,length.out=n)
-data <- data + trend
+# data <- data + trend
 plot(data)
 
 spec = ugarchspec() # by default arma(1,1) and garch(1,1)
 fit_mean = ugarchfit(data = data, spec = spec)
 
-spec = ugarchspec(variance.model = list(external.regressors = trend),
-                  mean.model = list(include.mean = FALSE)) # by default arma(1,1) and garch(1,1)
+spec = ugarchspec(mean.model = list(armaOrder = c(1, 1), include.mean = FALSE), 
+                  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)))
 fit_no_mean = ugarchfit(data = data, spec = spec)
 
 plot(data, type='l')
