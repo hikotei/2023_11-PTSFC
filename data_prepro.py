@@ -85,10 +85,15 @@ add temperature and weather data (population weighted?)
 
 """
 
-def get_energy_data_today() :
+def get_energy_data_today(to_date=None) :
 
     print(os.getcwd())
-    today = datetime.today().strftime("%Y%m%d")
+
+    # if input param to_date is not given, use today's date
+    if to_date is None :
+        today = datetime.today().strftime("%Y%m%d")
+    else :
+        today = to_date
 
     hist_fname = f"Realisierter_Stromverbrauch_201501010000_202310312359_Viertelstunde.csv"
     recent_fname = f"Realisierter_Stromverbrauch_202311010000_{today}2359_Viertelstunde.csv"
