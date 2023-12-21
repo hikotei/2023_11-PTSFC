@@ -87,6 +87,7 @@ add temperature and weather data (population weighted?)
 
 def get_energy_data_today(to_date=None) :
 
+    os.chdir("C:/Users/ytl_c/OneDrive/Desktop/23_24 WS (Master)/VL - PTSFC/2023_11-PTSFC")
     print(os.getcwd())
 
     # if input param to_date is not given, use today's date
@@ -126,6 +127,9 @@ def get_energy_data_today(to_date=None) :
     df['timestamp_CET'] = df['timestamp'].dt.tz_localize('CET', ambiguous='infer')
     df['timestamp_UTC'] = df['timestamp_CET'].dt.tz_convert('UTC')
     df.set_index("timestamp_UTC", inplace=True)
+    
+    # make index datetime object
+    df.index = pd.to_datetime(df.index)
 
     df_utc = df[['gesamt', 'timestamp_CET']].copy()
 
@@ -149,7 +153,14 @@ def get_energy_data_today(to_date=None) :
     df_hourly = df_utc_interp.resample("1h", label="left").agg({'gesamt':'sum','timestamp_CET':'first'})
 
     # Add weekday column
-    df_hourly["weekday"] = df_hourly['timestamp_CET'].dt.weekday # Monday=0, Sunday=6
+    # df_hourly["weekday"] = df_hourly['timestamp_CET'].dt.weekday # Monday=0, Sunday=6
+
+    # reorder columns
+    df_hourly = df_hourly[["timestamp_CET", "gesamt"]]
+
+    to_date_str = datetime.strptime(to_date, "%Y%m%d").strftime("%Y-%m-%d")
+    fname = f"2015-01-01_{to_date_str}_energy"
+    df_hourly.to_csv(f"./data/{fname}.csv")
 
     return df_hourly
 
