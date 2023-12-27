@@ -165,7 +165,7 @@ def get_energy_data_today(to_date=None) :
 
     return df_hourly
 
-def create_features_df(df, lags=None):
+def create_features_df(df, holiday_method='simple', lags=None):
 
     df_out = df.copy()
 
@@ -190,18 +190,91 @@ def create_features_df(df, lags=None):
     uniq_yrs = df_out['timestamp_CET'].dt.year.unique()
 
     # get holidays for germany for all states and combine them into one single dict
-    states = ['BB', 'BE', 'BW', 'BY', 'BYP', 'HB', 'HE', 'HH', 'MV',
-            'NI', 'NW', 'RP', 'SH', 'SL', 'SN', 'ST', 'TH']
-
+    states = ['BB', 'BE', 'BW', 'BY', 'BYP', 'HB', 'HE', 'HH', 'MV', 
+              'NI', 'NW', 'RP', 'SH', 'SL', 'SN', 'ST', 'TH']
+    
     holidays_de = holidays.CountryHoliday('DE', years=uniq_yrs)
     for state in states:
         holidays_de.update(holidays.CountryHoliday('DE', state=state, years=uniq_yrs))
 
     # sort holidays
+    holidays_de = dict(sorted(holidays_de.items()))
     holidays_de_dates = list(holidays_de.keys())
 
-    # add holiday
-    df_out["holiday"] = df_out['timestamp_CET'].isin(holidays_de_dates).astype(int)
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+    # only one holiday dummy for all holidays
+    if holiday_method == 'simple':
+
+        df_out['is_holiday'] = df_out['timestamp_CET'].dt.date.isin(holidays_de_dates).astype(int)
+
+    # create separate dummies for each holiday ...
+    if holiday_method == 'separate' :
+
+        # newyears + silvester ist kein feiertag aber die meisten nehmen trotzdem frei
+        # create dummy variable for all rows where timestamp_CET is 12.31 or 01.01
+        df_out['is_holiday_newyear_d31'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 31))
+        df_out['is_holiday_newyear_d01'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1))
+
+        # Heilige Drei Könige (01.06)
+        threekings_dates = [k for k, v in holidays_de.items() if v == 'Heilige Drei Könige']
+        df_out['is_holiday_threekings'] = df_out['timestamp_CET'].dt.date.isin(threekings_dates)
+
+        # Karfreitag (easter - 2d)
+        karfreitag_dates = [k for k, v in holidays_de.items() if v == 'Karfreitag']
+        df_out['is_holiday_karfreitag'] = df_out['timestamp_CET'].dt.date.isin(karfreitag_dates)
+
+        # Eastermonday (easter + 1d)
+        easter_dates = [k for k, v in holidays_de.items() if v == 'Ostermontag']
+        df_out['is_holiday_easter'] = df_out['timestamp_CET'].dt.date.isin(easter_dates)
+
+        # Erster Mai / Tag der Arbeit (05.01)
+        erstermai_dates = [k for k, v in holidays_de.items() if v == 'Erster Mai']
+        df_out['is_holiday_erstermai'] = df_out['timestamp_CET'].dt.date.isin(erstermai_dates)
+
+        # Christi Himmelfahrt (easter + 39d)
+        himmelfahrt_dates = [k for k, v in holidays_de.items() if v == 'Christi Himmelfahrt']
+        df_out['is_holiday_himmelfahrt'] = df_out['timestamp_CET'].dt.date.isin(himmelfahrt_dates)
+
+        # Pfingstmontag (easter + 50d)
+        pfingstmontag_dates = [k for k, v in holidays_de.items() if v == 'Pfingstmontag']
+        df_out['is_holiday_pfingstmontag'] = df_out['timestamp_CET'].dt.date.isin(pfingstmontag_dates)
+
+        # Fronleichnam (easter + 60d)
+        fronleichnam_dates = [k for k, v in holidays_de.items() if v == 'Fronleichnam']
+        df_out['is_holiday_fronleichnam'] = df_out['timestamp_CET'].dt.date.isin(fronleichnam_dates)
+
+        # Maria Himmelfahrt (08.15)
+        mariahimmelfahrt_dates = [k for k, v in holidays_de.items() if v == 'Mariä Himmelfahrt']
+        df_out['is_holiday_mariahimmelfahrt'] = df_out['timestamp_CET'].dt.date.isin(mariahimmelfahrt_dates)
+
+        # Tag der Deutschen Einheit (10.03)
+        einheit_dates = [k for k, v in holidays_de.items() if v == 'Tag der Deutschen Einheit']
+        df_out['is_holiday_einheit'] = df_out['timestamp_CET'].dt.date.isin(einheit_dates)
+
+        # Reformationstag (10.31)
+        reformationstag_dates = [k for k, v in holidays_de.items() if v == 'Reformationstag']
+        df_out['is_holiday_reformationstag'] = df_out['timestamp_CET'].dt.date.isin(reformationstag_dates)
+
+        # Allerheiligen (11.01)
+        allerheiligen_dates = [k for k, v in holidays_de.items() if v == 'Allerheiligen']
+        df_out['is_holiday_allerheiligen'] = df_out['timestamp_CET'].dt.date.isin(allerheiligen_dates)
+
+        # christmas = list of datetimes from 12.24 to 12.26 
+        df_out['is_holiday_xmas_d23'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 23))
+        df_out['is_holiday_xmas_d24'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 24))
+        df_out['is_holiday_xmas_d25'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 25))
+        df_out['is_holiday_xmas_d26'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 26))
+
+        # brückentage zwischen weihnachten und neujahr
+        # 12.27, 12.28, 12.29, 12.30
+        df_out['is_holiday_xmas2newyear'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day.isin([27,28,29,30])))
+
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+        # reformat all columns that begin with "is_holiday" to int
+        for col in df_out.columns:
+            if col.startswith('is_holiday'):
+                df_out[col] = df_out[col].astype(int)
 
     # - - - - - - - - - - - - - - - - - - - - - -
     # lags
@@ -212,9 +285,9 @@ def create_features_df(df, lags=None):
         for lag in lags:
             df_out[f"lag_{lag}"] = df_out["gesamt"].shift(lag)
 
-    # take biggest value in lags and remove first rows in df_out to get rid of NaNs
-    max_lag = max(lags)
-    df_out = df_out[max_lag:]
+        # take biggest value in lags and remove first rows in df_out to get rid of NaNs
+        max_lag = max(lags)
+        df_out = df_out[max_lag:]
 
     # - - - - - - - - - - - - - - - - - - - - - -
     # df_out.drop(columns=["timestamp_CET"], inplace=True)
