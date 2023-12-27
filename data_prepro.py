@@ -165,9 +165,13 @@ def get_energy_data_today(to_date=None) :
 
     return df_hourly
 
-def create_features_df(df):
+def create_features_df(df, lags=None):
 
     df_out = df.copy()
+
+    # - - - - - - - - - - - - - - - - - - - - - -
+    # basic features 
+    # - - - - - - - - - - - - - - - - - - - - - -
 
     # add hour
     df_out["hour"] = df_out['timestamp_CET'].dt.hour
@@ -177,6 +181,10 @@ def create_features_df(df):
     df_out["month"] = df_out['timestamp_CET'].dt.month
     # add weeknum
     # df_out["weeknum"] = df_out['timestamp_CET'].dt.isocalendar().week
+
+    # - - - - - - - - - - - - - - - - - - - - - -
+    # holidays
+    # - - - - - - - - - - - - - - - - - - - - - -
 
     # get all years in dataframe
     uniq_yrs = df_out['timestamp_CET'].dt.year.unique()
@@ -195,6 +203,20 @@ def create_features_df(df):
     # add holiday
     df_out["holiday"] = df_out['timestamp_CET'].isin(holidays_de_dates).astype(int)
 
+    # - - - - - - - - - - - - - - - - - - - - - -
+    # lags
+    # - - - - - - - - - - - - - - - - - - - - - -
+
+    # add lagged versions of column 'gesamt' based on input lags list of lagged values
+    if lags is not None:
+        for lag in lags:
+            df_out[f"lag_{lag}"] = df_out["gesamt"].shift(lag)
+
+    # take biggest value in lags and remove first rows in df_out to get rid of NaNs
+    max_lag = max(lags)
+    df_out = df_out[max_lag:]
+
+    # - - - - - - - - - - - - - - - - - - - - - -
     # df_out.drop(columns=["timestamp_CET"], inplace=True)
 
     return df_out
