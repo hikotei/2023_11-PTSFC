@@ -294,24 +294,27 @@ def create_features_df(df, holiday_method='simple', lags=None):
 
     return df_out
 
-def create_dummy_df(df, hour_method='simple', holiday_method='simple'):
+def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_method='simple', holiday_method='simple'):
 
     df_out = df.copy()
 
-    # binary dummy var for each month
-    dummy_month = pd.get_dummies(df_out['timestamp_CET'].dt.month, prefix='month').astype(int)
-    # leave out first month to avoid multicollinearity
-    dummy_month = dummy_month.iloc[:, 1:]
+    if month_method == 'simple':
 
-    # binary dummy var for each weekday
-    dummy_weekday = pd.get_dummies(df_out['timestamp_CET'].dt.weekday, prefix='weekday').astype(int)
-    # leave out first weekday to avoid multicollinearity
-    dummy_weekday = dummy_weekday.iloc[:, 1:]
+        # binary dummy var for each month
+        dummy_month = pd.get_dummies(df_out['timestamp_CET'].dt.month, prefix='month').astype(int)
+        # leave out first month to avoid multicollinearity
+        dummy_month = dummy_month.iloc[:, 1:]
 
-    # - - - - - - - - -
-    # concat dummies
-    df_out = pd.concat([df_out, dummy_month], axis=1)
-    df_out = pd.concat([df_out, dummy_weekday], axis=1)
+        df_out = pd.concat([df_out, dummy_month], axis=1)
+
+    if weekday_method == 'simple':
+
+        # binary dummy var for each weekday
+        dummy_weekday = pd.get_dummies(df_out['timestamp_CET'].dt.weekday, prefix='weekday').astype(int)
+        # leave out first weekday to avoid multicollinearity
+        dummy_weekday = dummy_weekday.iloc[:, 1:]
+
+        df_out = pd.concat([df_out, dummy_weekday], axis=1)
 
     # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
     # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
