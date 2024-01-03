@@ -394,7 +394,25 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
         # newyears + silvester ist kein feiertag aber die meisten nehmen trotzdem frei
         # create dummy variable for all rows where timestamp_CET is 12.31 or 01.01
         df_out['is_holiday_newyear_d31'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 31))
-        df_out['is_holiday_newyear_d01'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1))
+        df_out['is_holiday_newyear_d31'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1) & (df_out['timestamp_CET'].dt.hour < 6))
+        df_out['is_holiday_newyear_d01'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1) & (df_out['timestamp_CET'].dt.hour >= 6))
+
+        # # List of holiday names
+        # holiday_names = [
+        #     'Heilige Drei Könige', 'Karfreitag', 'Ostersonntag', 'Ostermontag',
+        #     'Erster Mai', 'Christi Himmelfahrt', 'Pfingstmontag', 'Fronleichnam',
+        #     'Mariä Himmelfahrt', 'Tag der Deutschen Einheit', 'Reformationstag',
+        #     'Allerheiligen'
+        # ]
+
+        # # Iterate over holiday names
+        # for holiday_name in holiday_names:
+        #     # Get corresponding dates for the holiday
+        #     holiday_dates = [k for k, v in holidays_de.items() if v == holiday_name]
+            
+        #     # Create a column for each holiday
+        #     column_name = 'is_holiday_' + holiday_name.lower().replace(' ', '')
+        #     df_out[column_name] = df_out['timestamp_CET'].dt.date.isin(holiday_dates)
 
         # Heilige Drei Könige (01.06)
         threekings_dates = [k for k, v in holidays_de.items() if v == 'Heilige Drei Könige']
@@ -404,9 +422,13 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
         karfreitag_dates = [k for k, v in holidays_de.items() if v == 'Karfreitag']
         df_out['is_holiday_karfreitag'] = df_out['timestamp_CET'].dt.date.isin(karfreitag_dates)
 
+        # Eastersunday (easter)
+        easter_sun_dates = [k for k, v in holidays_de.items() if v == 'Ostersonntag']
+        df_out['is_holiday_easter_sunday'] = df_out['timestamp_CET'].dt.date.isin(easter_sun_dates)
+
         # Eastermonday (easter + 1d)
-        easter_dates = [k for k, v in holidays_de.items() if v == 'Ostermontag']
-        df_out['is_holiday_easter'] = df_out['timestamp_CET'].dt.date.isin(easter_dates)
+        easter_mon_dates = [k for k, v in holidays_de.items() if v == 'Ostermontag']
+        df_out['is_holiday_easter_monday'] = df_out['timestamp_CET'].dt.date.isin(easter_mon_dates)
 
         # Erster Mai / Tag der Arbeit (05.01)
         erstermai_dates = [k for k, v in holidays_de.items() if v == 'Erster Mai']
