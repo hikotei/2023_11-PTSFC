@@ -188,7 +188,8 @@ def create_features_df(df, holiday_method='simple', lags=None):
 
     # get all years in dataframe
     uniq_yrs = df_out['timestamp_CET'].dt.year.unique()
-
+    print(f"unique years in df: {uniq_yrs}")
+    
     # get holidays for germany for all states and combine them into one single dict
     states = ['BB', 'BE', 'BW', 'BY', 'BYP', 'HB', 'HE', 'HH', 'MV', 
               'NI', 'NW', 'RP', 'SH', 'SL', 'SN', 'ST', 'TH']
@@ -280,14 +281,16 @@ def create_features_df(df, holiday_method='simple', lags=None):
     # lags
     # - - - - - - - - - - - - - - - - - - - - - -
 
-    # add lagged versions of column 'gesamt' based on input lags list of lagged values
-    if lags is not None:
-        for lag in lags:
-            df_out[f"lag_{lag}"] = df_out["gesamt"].shift(lag)
+    # only if column 'gesamt' exists
+    if 'gesamt' in df_out.columns:
+        # add lagged versions of column 'gesamt' based on input lags list of lagged values
+        if lags is not None:
+            for lag in lags:
+                df_out[f"lag_{lag}"] = df_out["gesamt"].shift(lag)
 
-        # take biggest value in lags and remove first rows in df_out to get rid of NaNs
-        max_lag = max(lags)
-        df_out = df_out[max_lag:]
+            # take biggest value in lags and remove first rows in df_out to get rid of NaNs
+            max_lag = max(lags)
+            df_out = df_out[max_lag:]
 
     # - - - - - - - - - - - - - - - - - - - - - -
     # df_out.drop(columns=["timestamp_CET"], inplace=True)
@@ -299,18 +302,32 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
     df_out = df.copy()
 
     if month_method == 'simple':
+        
+        # https://stackoverflow.com/a/37426982/15816035
+        # - - - - - - - - - - - - - - - - - - - - - - -
+        # cats = ['a', 'b', 'c']
+        # df = pd.DataFrame({'cat': ['a', 'b', 'a']})
+
+        # dummies = pd.get_dummies(df, prefix='', prefix_sep='')
+        # dummies = dummies.T.reindex(cats).T.fillna(0)
+
+        cats = ['month_1', 'month_2', 'month_3', 'month_4', 'month_5', 'month_6', 'month_7', 'month_8', 'month_9', 'month_10', 'month_11', 'month_12']
 
         # binary dummy var for each month
         dummy_month = pd.get_dummies(df_out['timestamp_CET'].dt.month, prefix='month').astype(int)
+        dummy_month = dummy_month.T.reindex(cats).T.fillna(0)
         # leave out first month to avoid multicollinearity
         dummy_month = dummy_month.iloc[:, 1:]
-
+        # add values dummy_month to df_temp
         df_out = pd.concat([df_out, dummy_month], axis=1)
 
     if weekday_method == 'simple':
 
+        cats = ['weekday_0', 'weekday_1', 'weekday_2', 'weekday_3', 'weekday_4', 'weekday_5', 'weekday_6']
+
         # binary dummy var for each weekday
         dummy_weekday = pd.get_dummies(df_out['timestamp_CET'].dt.weekday, prefix='weekday').astype(int)
+        dummy_weekday = dummy_weekday.T.reindex(cats).T.fillna(0)
         # leave out first weekday to avoid multicollinearity
         dummy_weekday = dummy_weekday.iloc[:, 1:]
 
@@ -393,9 +410,8 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
 
         # newyears + silvester ist kein feiertag aber die meisten nehmen trotzdem frei
         # create dummy variable for all rows where timestamp_CET is 12.31 or 01.01
-        df_out['is_holiday_newyear_d31'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 31))
-        df_out['is_holiday_newyear_d31'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1) & (df_out['timestamp_CET'].dt.hour < 6))
-        df_out['is_holiday_newyear_d01'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1) & (df_out['timestamp_CET'].dt.hour >= 6))
+        df_out['is_holiday_newyear_d31'] = (((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 31)) | ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1) & (df_out['timestamp_CET'].dt.hour <= 6)))
+        df_out['is_holiday_newyear_d01'] = ((df_out['timestamp_CET'].dt.month == 1) & (df_out['timestamp_CET'].dt.day == 1) & (df_out['timestamp_CET'].dt.hour > 6))
 
         # # List of holiday names
         # holiday_names = [
@@ -416,11 +432,12 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
 
         # Heilige Drei Könige (01.06)
         threekings_dates = [k for k, v in holidays_de.items() if v == 'Heilige Drei Könige']
-        df_out['is_holiday_threekings'] = df_out['timestamp_CET'].dt.date.isin(threekings_dates)
+        df_out['is_holiday_threekings'] = (df_out['timestamp_CET'].dt.date.isin(threekings_dates) & (df_out['timestamp_CET'].dt.hour > 3))
 
         # Karfreitag (easter - 2d)
         karfreitag_dates = [k for k, v in holidays_de.items() if v == 'Karfreitag']
-        df_out['is_holiday_karfreitag'] = df_out['timestamp_CET'].dt.date.isin(karfreitag_dates)
+        df_out['is_holiday_karfreitag'] = (df_out['timestamp_CET'].dt.date.isin(karfreitag_dates) & (df_out['timestamp_CET'].dt.hour > 6))
+        # also add the hours till 5am of the following day
 
         # Eastersunday (easter)
         easter_sun_dates = [k for k, v in holidays_de.items() if v == 'Ostersonntag']
@@ -428,45 +445,45 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
 
         # Eastermonday (easter + 1d)
         easter_mon_dates = [k for k, v in holidays_de.items() if v == 'Ostermontag']
-        df_out['is_holiday_easter_monday'] = df_out['timestamp_CET'].dt.date.isin(easter_mon_dates)
+        df_out['is_holiday_easter_monday'] = (df_out['timestamp_CET'].dt.date.isin(easter_mon_dates) & (df_out['timestamp_CET'].dt.hour > 6))
 
         # Erster Mai / Tag der Arbeit (05.01)
         erstermai_dates = [k for k, v in holidays_de.items() if v == 'Erster Mai']
-        df_out['is_holiday_erstermai'] = df_out['timestamp_CET'].dt.date.isin(erstermai_dates)
+        df_out['is_holiday_erstermai'] = (df_out['timestamp_CET'].dt.date.isin(erstermai_dates) & (df_out['timestamp_CET'].dt.hour > 6))
 
         # Christi Himmelfahrt (easter + 39d)
         himmelfahrt_dates = [k for k, v in holidays_de.items() if v == 'Christi Himmelfahrt']
-        df_out['is_holiday_himmelfahrt'] = df_out['timestamp_CET'].dt.date.isin(himmelfahrt_dates)
+        df_out['is_holiday_himmelfahrt'] = (df_out['timestamp_CET'].dt.date.isin(himmelfahrt_dates) & (df_out['timestamp_CET'].dt.hour > 6))
 
         # Pfingstmontag (easter + 50d)
         pfingstmontag_dates = [k for k, v in holidays_de.items() if v == 'Pfingstmontag']
-        df_out['is_holiday_pfingstmontag'] = df_out['timestamp_CET'].dt.date.isin(pfingstmontag_dates)
+        df_out['is_holiday_pfingstmontag'] = (df_out['timestamp_CET'].dt.date.isin(pfingstmontag_dates) & (df_out['timestamp_CET'].dt.hour > 3))
 
         # Fronleichnam (easter + 60d)
         fronleichnam_dates = [k for k, v in holidays_de.items() if v == 'Fronleichnam']
-        df_out['is_holiday_fronleichnam'] = df_out['timestamp_CET'].dt.date.isin(fronleichnam_dates)
+        df_out['is_holiday_fronleichnam'] = (df_out['timestamp_CET'].dt.date.isin(fronleichnam_dates) & (df_out['timestamp_CET'].dt.hour > 3))
 
         # Maria Himmelfahrt (08.15)
         mariahimmelfahrt_dates = [k for k, v in holidays_de.items() if v == 'Mariä Himmelfahrt']
-        df_out['is_holiday_mariahimmelfahrt'] = df_out['timestamp_CET'].dt.date.isin(mariahimmelfahrt_dates)
+        df_out['is_holiday_mariahimmelfahrt'] = (df_out['timestamp_CET'].dt.date.isin(mariahimmelfahrt_dates) & (df_out['timestamp_CET'].dt.hour > 2))
 
         # Tag der Deutschen Einheit (10.03)
         einheit_dates = [k for k, v in holidays_de.items() if v == 'Tag der Deutschen Einheit']
-        df_out['is_holiday_einheit'] = df_out['timestamp_CET'].dt.date.isin(einheit_dates)
+        df_out['is_holiday_einheit'] = (df_out['timestamp_CET'].dt.date.isin(einheit_dates) & (df_out['timestamp_CET'].dt.hour > 3))
 
         # Reformationstag (10.31)
         reformationstag_dates = [k for k, v in holidays_de.items() if v == 'Reformationstag']
-        df_out['is_holiday_reformationstag'] = df_out['timestamp_CET'].dt.date.isin(reformationstag_dates)
+        df_out['is_holiday_reformationstag'] = (df_out['timestamp_CET'].dt.date.isin(reformationstag_dates)  & (df_out['timestamp_CET'].dt.hour > 2))
 
         # Allerheiligen (11.01)
         allerheiligen_dates = [k for k, v in holidays_de.items() if v == 'Allerheiligen']
         df_out['is_holiday_allerheiligen'] = df_out['timestamp_CET'].dt.date.isin(allerheiligen_dates)
 
         # christmas = list of datetimes from 12.24 to 12.26 
-        df_out['is_holiday_xmas_d23'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 23))
+        df_out['is_holiday_xmas_d23'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 23) & (df_out['timestamp_CET'].dt.hour > 3))
         df_out['is_holiday_xmas_d24'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 24))
-        df_out['is_holiday_xmas_d25'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 25))
-        df_out['is_holiday_xmas_d26'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 26))
+        df_out['is_holiday_xmas_d25'] = (((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 25)) | ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 26) & (df_out['timestamp_CET'].dt.hour < 6)))
+        df_out['is_holiday_xmas_d26'] = ((df_out['timestamp_CET'].dt.month == 12) & (df_out['timestamp_CET'].dt.day == 26) & (df_out['timestamp_CET'].dt.hour >= 6))
 
         # brückentage zwischen weihnachten und neujahr
         # 12.27, 12.28, 12.29, 12.30
