@@ -88,7 +88,8 @@ add temperature and weather data (population weighted?)
 
 def get_energy_data_today(to_date=None) :
 
-    os.chdir("C:/Users/ytl_c/OneDrive/Desktop/23_24 WS (Master)/VL - PTSFC/2023_11-PTSFC")
+    # os.chdir("C:/Users/ytl_c/OneDrive/Desktop/23_24 WS (Master)/VL - PTSFC/2023_11-PTSFC")
+    os.chdir("../2023_11-PTSFC")
     print(os.getcwd())
 
     # if input param to_date is not given, use today's date
