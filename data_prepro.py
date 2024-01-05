@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import holidays
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =	
 # Get DAX Data
@@ -88,31 +88,40 @@ add temperature and weather data (population weighted?)
 
 def get_energy_data_today(to_date=None) :
 
-    # os.chdir("C:/Users/ytl_c/OneDrive/Desktop/23_24 WS (Master)/VL - PTSFC/2023_11-PTSFC")
-    os.chdir("../2023_11-PTSFC")
+    os.chdir("C:/2023_11-PTSFC")
+    # os.chdir("../2023_11-PTSFC")
     print(os.getcwd())
 
     # if input param to_date is not given, use today's date
     if to_date is None :
-        today = datetime.today().strftime("%Y%m%d")
-    else :
-        today = to_date
+        to_date = datetime.today().strftime("%Y%m%d")
 
     hist_fname = f"Realisierter_Stromverbrauch_201501010000_202310312359_Viertelstunde.csv"
-    recent_fname = f"Realisierter_Stromverbrauch_202311010000_{today}2359_Viertelstunde.csv"
+    recent_fname = f"Realisierter_Stromverbrauch_202311010000_{to_date}2359_Viertelstunde.csv"
 
-    # Check if file exists first before loading data
-    if not os.path.isfile(f"./data/{recent_fname}"):
-        print(f"{recent_fname} does not exist, first download data from SMARD !")
-        return None
+    # if to_date is earlier than 2023_11_01, use historic data only
+    only_hist = True
+    
+    if to_date > "20231101" :
+        print(f"to_date is later than 2023-11-01, using historic and recent data !")
+        only_hist = False
+
+        # Check if file exists first before loading data
+        if not os.path.isfile(f"./data/{recent_fname}"):
+            print(f"{recent_fname} does not exist, first download data from SMARD !")
+            return None
 
     # Load data
     hist_df = pd.read_csv(f"./data/{hist_fname}", sep=";", decimal=",")
-    recent_df = pd.read_csv(f"./data/{recent_fname}", sep=";", decimal=",")
 
-    # merge 2 dataframes
-    df = pd.concat([hist_df, recent_df])
-
+    if not only_hist : 
+        recent_df = pd.read_csv(f"./data/{recent_fname}", sep=";", decimal=",")
+        # merge 2 dataframes
+        df = pd.concat([hist_df, recent_df])
+    else :
+        print(f"to_date is earlier than 2023-11-01, using historic data only !")
+        df = hist_df.copy()
+    
     # Rename columns for convenience
     df.columns = ["datum", "anfang", "ende", "gesamt", "residual", "pump"]
 
@@ -132,8 +141,12 @@ def get_energy_data_today(to_date=None) :
     
     # make index datetime object
     df.index = pd.to_datetime(df.index)
-
     df_utc = df[['gesamt', 'timestamp_CET']].copy()
+
+    # cutoff date if using historic data only
+    if only_hist :
+        cutoff = (datetime.strptime(to_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        df_utc = df_utc[df_utc['timestamp_CET'] <= cutoff]
 
     # Replace "." with "" and then replace "," with "."
     df_utc[['gesamt']] = df_utc[['gesamt']].apply(lambda x: x.str.replace('.', '', regex=False))
@@ -189,7 +202,7 @@ def create_features_df(df, holiday_method='simple', lags=None):
 
     # get all years in dataframe
     uniq_yrs = df_out['timestamp_CET'].dt.year.unique()
-    print(f"unique years in df: {uniq_yrs}")
+    # print(f"unique years in df: {uniq_yrs}")
     
     # get holidays for germany for all states and combine them into one single dict
     states = ['BB', 'BE', 'BW', 'BY', 'BYP', 'HB', 'HE', 'HH', 'MV', 
@@ -495,6 +508,21 @@ def create_dummy_df(df, month_method='simple', weekday_method='simple', hour_met
         for col in df_out.columns:
             if col.startswith('is_holiday'):
                 df_out[col] = df_out[col].astype(int)
+
+    return df_out
+
+def fix_quantile_crossing(df):
+
+    df_out = df.copy()
+    for index, row in df.iterrows():
+
+        # check if quantiles are in ascending order
+        if not all(row.diff().dropna() > 0):
+            # print(f'> ERROR: Quantiles are not in ascending order for {index}')
+            # print(row)
+            # sort columns 
+            df_out.loc[index] = row.sort_values().values
+            # print(df_ensemble_pred.loc[index])
 
     return df_out
 
