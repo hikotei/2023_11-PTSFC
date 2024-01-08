@@ -146,7 +146,7 @@ def get_energy_data_today(to_date=None) :
     # cutoff date if using historic data only
     if only_hist :
         cutoff = (datetime.strptime(to_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        df_utc = df_utc[df_utc['timestamp_CET'] <= cutoff]
+        df_utc = df_utc[df_utc['timestamp_CET'] < cutoff]
 
     # Replace "." with "" and then replace "," with "."
     df_utc[['gesamt']] = df_utc[['gesamt']].apply(lambda x: x.str.replace('.', '', regex=False))
