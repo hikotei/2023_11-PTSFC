@@ -18,15 +18,17 @@ set.seed(1103)
 
 if (Sys.info()[[1]] == 'Windows') {
     comp <- 'surface'
-    homedir <- "C:/Users/ytl_c/OneDrive/Desktop/23_24 WS (Master)/VL - PTSFC"
+    homedir <- "C:/2023_11-PTSFC"
     
-} else { 
+} else {
     comp <- 'mac'
     homedir <- "/Users/yanting/OneDrive/Desktop/23_24 WS (Master)/VL - PTSFC"
 }
 
 setwd(homedir)
+setwd('./dax')
 source("dax_procs.R")
+setwd('../')
 
 tau_arr <- c(.025, .25, .5, .75, .975) # quantile levels
 
@@ -34,8 +36,8 @@ tau_arr <- c(.025, .25, .5, .75, .975) # quantile levels
 # get dax data ####
 
 start_date  <- "2020-01-01"
-fcast_date  <- "2024-01-03"
-# fcast_date  <- Sys.Date()
+# fcast_date  <- "2024-01-03"
+fcast_date  <- Sys.Date()
 
 DAX_prices = get.hist.quote(instrument="^GDAXI", 
                             start=start_date, end=fcast_date, 
@@ -77,7 +79,6 @@ plot(DAX_returns$ret1, type='l')
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 # train test split ####
-
 n_total <- nrow(DAX_returns)
 n_train <- n_total
 
@@ -158,6 +159,7 @@ for (idx in 1:5) {
 
 # initialize matrix (rows are quantile levels, cols are horizons)
 pred_garch <- matrix(NA, nrow = length(tau_arr), ncol = 5)
+
 # loop over 5 fcast horizons
 for (jj in 1:5){ 
     for (tau_idx in seq_along(tau_arr)) {
