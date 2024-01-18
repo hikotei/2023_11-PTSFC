@@ -36,7 +36,7 @@ tau_arr <- c(.025, .25, .5, .75, .975) # quantile levels
 # get dax data ####
 
 start_date  <- "2020-01-01"
-# fcast_date  <- "2024-01-03"
+# fcast_date  <- "2024-01-10"
 fcast_date  <- Sys.Date()
 
 DAX_prices = get.hist.quote(instrument="^GDAXI", 
@@ -233,6 +233,6 @@ newdir <- paste0(homedir, "/Submissions/", fcast_date_)
 if (!file.exists(newdir)) { dir.create(newdir) }
 setwd(newdir)
 
-flnm <- paste0(fcast_date_, "_DAX.csv")
+flnm <- paste0(fcast_date_, "_DAX_fcast_submission.csv")
 write.table(pred_df, flnm, sep = ",", row.names = FALSE, col.names = TRUE)
 setwd(homedir)

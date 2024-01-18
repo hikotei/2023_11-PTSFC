@@ -103,13 +103,32 @@ def get_energy_data_today(to_date=None) :
     only_hist = True
     
     if to_date > "20231101" :
-        print(f"to_date is later than 2023-11-01, using historic and recent data !")
+        print(f"to_date is later than 2023-11-01, using recent data as well !")
         only_hist = False
 
         # Check if file exists first before loading data
         if not os.path.isfile(f"./data/{recent_fname}"):
-            print(f"{recent_fname} does not exist, first download data from SMARD !")
-            return None
+
+            # if file DNE then see if a later date exists 
+            # which we can also take but just need to cut off the irrelevant tail
+
+            # check all files that start with "Realisierter_Stromverbrauch_202311010000_"
+            # and take the first one with a date later than to_date
+            # if no such file exists then return warning to download data from SMARD
+
+            files = os.listdir("./data")
+            files = [f for f in files if f.startswith("Realisierter_Stromverbrauch_202311010000_")]
+            files = [f for f in files if f.endswith("2359_Viertelstunde.csv")]
+            files = [f for f in files if f > recent_fname]
+
+            # take first file in list
+            if len(files) > 0 :             
+                recent_fname = files[0]
+                print(f"using {recent_fname} instead of {recent_fname} !")
+            
+            else :
+                print(f"{recent_fname} does not exist, first download data from SMARD !")
+                return None
 
     # Load data
     hist_df = pd.read_csv(f"./data/{hist_fname}", sep=";", decimal=",")
@@ -144,9 +163,10 @@ def get_energy_data_today(to_date=None) :
     df_utc = df[['gesamt', 'timestamp_CET']].copy()
 
     # cutoff date if using historic data only
-    if only_hist :
-        cutoff = (datetime.strptime(to_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        df_utc = df_utc[df_utc['timestamp_CET'] < cutoff]
+    # but also need cutoff when using recent data later than to_date
+    # if only_hist :
+    cutoff = (datetime.strptime(to_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    df_utc = df_utc[df_utc['timestamp_CET'] < cutoff]
 
     # Replace "." with "" and then replace "," with "."
     df_utc[['gesamt']] = df_utc[['gesamt']].apply(lambda x: x.str.replace('.', '', regex=False))
