@@ -86,116 +86,128 @@ add temperature and weather data (population weighted?)
 
 """
 
-def get_energy_data_today(to_date=None) :
+def get_energy_data_today(to_date=None, recycle=False) :
 
     os.chdir("C:/2023_11-PTSFC")
     # os.chdir("../2023_11-PTSFC")
-    print(os.getcwd())
+    print(f"> cwd = {os.getcwd()}")
 
     # if input param to_date is not given, use today's date
     if to_date is None :
         to_date = datetime.today().strftime("%Y%m%d")
 
-    hist_fname = f"Realisierter_Stromverbrauch_201501010000_202310312359_Viertelstunde.csv"
-    recent_fname = f"Realisierter_Stromverbrauch_202311010000_{to_date}2359_Viertelstunde.csv"
+    # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # check if file already exists
+        
+    # if file DNE then see if a later date exists 
+    # which we can also take but just need to cut off the irrelevant tail
 
-    # if to_date is earlier than 2023_11_01, use historic data only
-    only_hist = True
-    
-    if to_date > "20231101" :
-        print(f"to_date is later than 2023-11-01, using recent data as well !")
-        only_hist = False
+    # check all files that start with "2015-01-01_" and end with "_energy.csv"
+    # and take the first one with a date later than to_date
+    # if no such file exists then proceed download data from SMARD
+        
+    if recycle :
 
-        # Check if file exists first before loading data
-        if not os.path.isfile(f"./data/{recent_fname}"):
+        to_date_fname = datetime.strptime(to_date, "%Y%m%d").strftime("%Y-%m-%d")
+        fname = f"2015-01-01_{to_date_fname}_energy.csv"
+        print(f"> checking if {fname} or later already exists ...")
 
-            # if file DNE then see if a later date exists 
-            # which we can also take but just need to cut off the irrelevant tail
+        if os.path.isfile(f"./data/{fname}"):
+            print(f"> {fname} already exists, reading from csv ...")
+            df = pd.read_csv(f"./data/{fname}")
+            return df
 
-            # check all files that start with "Realisierter_Stromverbrauch_202311010000_"
-            # and take the first one with a date later than to_date
-            # if no such file exists then return warning to download data from SMARD
-
+        else :
             files = os.listdir("./data")
-            files = [f for f in files if f.startswith("Realisierter_Stromverbrauch_202311010000_")]
-            files = [f for f in files if f.endswith("2359_Viertelstunde.csv")]
-            files = [f for f in files if f > recent_fname]
+            files = [f for f in files if f.startswith("2015-01-01_")]
+            files = [f for f in files if f.endswith("_energy.csv")]
+            files = [f for f in files if f > fname]
 
-            # take first file in list
+            # take last file in list
             if len(files) > 0 :             
-                recent_fname = files[0]
-                print(f"using {recent_fname} instead of {recent_fname} !")
-            
+                recent_fname = files[-1]
+                print(f"using {recent_fname} instead of {fname} !")
+
+                df = pd.read_csv(f"./data/{recent_fname}")
+                cutoff = (datetime.strptime(to_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                df = df[df['timestamp_CET'] < cutoff]
+                return df
+
             else :
-                print(f"{recent_fname} does not exist, first download data from SMARD !")
-                return None
-
-    # Load data
-    hist_df = pd.read_csv(f"./data/{hist_fname}", sep=";", decimal=",")
-
-    if not only_hist : 
-        recent_df = pd.read_csv(f"./data/{recent_fname}", sep=";", decimal=",")
-        # merge 2 dataframes
-        df = pd.concat([hist_df, recent_df])
-    else :
-        print(f"to_date is earlier than 2023-11-01, using historic data only !")
-        df = hist_df.copy()
+                print(f"{fname} does not exist, downloading data from SMARD !")
     
-    # Rename columns for convenience
-    df.columns = ["datum", "anfang", "ende", "gesamt", "residual", "pump"]
-
+    # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+    
+    # if to_date is earlier than 2023_11_01, use historic data only
+    hist_fname = f"Realisierter_Stromverbrauch_201501010000_202310312359_Viertelstunde.csv"
+    hist_df = pd.read_csv(f"./data/{hist_fname}", sep=";", decimal=",")
+    # Rename columns for convenience and remove cols = ['residual', 'pump']
+    hist_df.columns = ["datum", "anfang", "ende", "gesamt", "residual", "pump"]
+    hist_df.drop(columns=['residual', 'pump'], inplace=True)
     # replace '-' with NA
-    df.replace('-', pd.NA, inplace=True)
+    hist_df.replace('-', pd.NA, inplace=True)
 
     # Merge date and time column and set that as the index
-    df["timestamp"] = pd.to_datetime(df['datum'] + ' ' + df['anfang'], format='%d.%m.%Y %H:%M')
-
-    # need to choose anfang here !!!
-    # otherwise in DST switching end of march we will have 3am twice
-
+    hist_df["timestamp"] = pd.to_datetime(hist_df['datum'] + ' ' + hist_df['anfang'], format='%d.%m.%Y %H:%M')
     # change datetime to utc time
-    df['timestamp_CET'] = df['timestamp'].dt.tz_localize('CET', ambiguous='infer')
-    df['timestamp_UTC'] = df['timestamp_CET'].dt.tz_convert('UTC')
-    df.set_index("timestamp_UTC", inplace=True)
-    
+    hist_df['timestamp_CET'] = hist_df['timestamp'].dt.tz_localize('CET', ambiguous='infer')
+    hist_df['timestamp_UTC'] = hist_df['timestamp_CET'].dt.tz_convert('UTC')
+    hist_df.set_index("timestamp_UTC", inplace=True)
     # make index datetime object
-    df.index = pd.to_datetime(df.index)
-    df_utc = df[['gesamt', 'timestamp_CET']].copy()
+    hist_df.index = pd.to_datetime(hist_df.index)
+    # drop redundant columns
+    hist_df = hist_df[['timestamp_CET', 'gesamt']].copy()
 
-    # cutoff date if using historic data only
-    # but also need cutoff when using recent data later than to_date
-    # if only_hist :
+    # Replace "." with "" and then replace "," with "."
+    hist_df[['gesamt']] = hist_df[['gesamt']].apply(lambda x: x.str.replace('.', '', regex=False))
+    hist_df[['gesamt']] = hist_df[['gesamt']].apply(lambda x: x.str.replace(',', '.', regex=False))
+    hist_df[['gesamt']] = hist_df[['gesamt']].apply(pd.to_numeric)
+
+    if to_date > "20231101" :
+        print(f"> to_date is later than 2023-11-01, using recent data as well !")
+        recent_df = get_energy_data_json()
+        # get last index of hist_df
+        last_index = hist_df.index[-1]
+        # drop rows of recent_df that are already in hist_df
+        recent_df = recent_df.loc[last_index + timedelta(minutes=15):]
+        # merge 2 dataframes
+        df_utc = pd.concat([hist_df, recent_df])
+
+    else :
+        print(f"> to_date is earlier than 2023-11-01, using historic data only !")
+        df_utc = hist_df.copy()
+
+    # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # cutoff date
     cutoff = (datetime.strptime(to_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     df_utc = df_utc[df_utc['timestamp_CET'] < cutoff]
 
-    # Replace "." with "" and then replace "," with "."
-    df_utc[['gesamt']] = df_utc[['gesamt']].apply(lambda x: x.str.replace('.', '', regex=False))
-    df_utc[['gesamt']] = df_utc[['gesamt']].apply(lambda x: x.str.replace(',', '.', regex=False))
-    df_utc[['gesamt']] = df_utc[['gesamt']].apply(pd.to_numeric)
-
+    # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
     # if there are consecutive trailing NaNs, drop them ... find last valid index
     last_valid_index = df_utc['gesamt'].last_valid_index()
 
     if last_valid_index is not None:
         df_utc = df_utc.loc[:last_valid_index]
 
-    print(f"{df_utc['gesamt'].isna().sum()} NA in df")
+    print(f"> {df_utc['gesamt'].isna().sum()} NA in df")
+    print(f"> last valid index = {last_valid_index}")
 
+    # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
     # Interpolate missing values in between
     df_utc_interp = df_utc.copy()
     df_utc_interp['gesamt'].interpolate(method='time', inplace=True)
 
+    # resample at hourly level
     df_hourly = df_utc_interp.resample("1h", label="left").agg({'gesamt':'sum','timestamp_CET':'first'})
-
-    # Add weekday column
-    # df_hourly["weekday"] = df_hourly['timestamp_CET'].dt.weekday # Monday=0, Sunday=6
 
     # reorder columns
     df_hourly = df_hourly[["timestamp_CET", "gesamt"]]
 
-    to_date_str = datetime.strptime(to_date, "%Y%m%d").strftime("%Y-%m-%d")
+    # save to csv
+    to_date_str = last_valid_index.strftime("%Y-%m-%d")
     fname = f"2015-01-01_{to_date_str}_energy"
     df_hourly.to_csv(f"./data/{fname}.csv")
+    print(f"> done and saved to {fname}.csv")
 
     return df_hourly
 
