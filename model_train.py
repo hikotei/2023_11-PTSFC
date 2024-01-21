@@ -93,36 +93,16 @@ def plot_quantile_fcast(df_in, fcast_idx, title=''):
     plt.figure(figsize=(15, 5))
     plt.title(f'{title} - quantile plot')
 
-    for quantile in df_in.columns:
+    cols = ['temp', 'lightblue', 'mediumblue', 'black', 'mediumblue', 'lightblue']
 
+    for idx, quantile in enumerate(df_in.columns):
         if 'timestamp' in quantile:
-            continue
-
+            continue # skip timestamp column
         y_pred = df_in[quantile]
-        quantile_float = float(quantile[2:])
+        plt.plot(df_in['timestamp_CET'], y_pred, label=f'{quantile}', lw=1, alpha=1, color=cols[idx])
 
-        # Save predicted values based on quantile
-        if '0.025' in quantile:
-            y_pred_025 = y_pred
-            col = 'lightblue'
-        elif '0.25' in quantile:
-            y_pred_25 = y_pred
-            col = 'mediumblue'
-        elif '0.5' in quantile:
-            y_pred_50 = y_pred
-            col = 'black'
-        elif '0.75' in quantile:
-            y_pred_75 = y_pred
-            col = 'mediumblue'
-        elif '0.975' in quantile:
-            y_pred_975 = y_pred
-            col = 'lightblue'
-        
-        # Plot the prediction line
-        plt.plot(df_in['timestamp_CET'], y_pred, label=f'{quantile}', lw=1, alpha=1, color=col)
-
-    plt.fill_between(df_in['timestamp_CET'], y_pred_025, y_pred_975, color='lightblue', alpha=0.1)
-    plt.fill_between(df_in['timestamp_CET'], y_pred_25, y_pred_75, color='mediumblue', alpha=0.1)
+    plt.fill_between(df_in['timestamp_CET'], df_in['q 0.025'], df_in['q 0.975'], color='lightblue', alpha=0.1)
+    plt.fill_between(df_in['timestamp_CET'], df_in['q 0.250'], df_in['q 0.750'], color='mediumblue', alpha=0.1)
 
     # submission period 1 = fcast_idx[:3]
     # submission period 2 = fcast_idx[3:]

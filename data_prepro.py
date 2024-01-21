@@ -1,11 +1,15 @@
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =	
 # Import libraries
-import os
 import numpy as np
 import pandas as pd
-import yfinance as yf
-import holidays
+
+from tqdm import tqdm
 from datetime import datetime, timedelta
+
+import os
+import requests
+import holidays
+import yfinance as yf
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =	
 # Get DAX Data
@@ -85,6 +89,42 @@ add weekend and holiday indicator variables (maybe separate important holidays e
 add temperature and weather data (population weighted?)
 
 """
+
+def get_energy_data_json():
+
+    # get all available time stamps
+    stampsurl = "https://www.smard.de/app/chart_data/410/DE/index_quarterhour.json"
+    response = requests.get(stampsurl)
+
+    # ignore first 8 years (historic data is in already saved csv)
+    timestamps = list(response.json()["timestamps"])[8*52 + 45:]
+
+    col_names = ['timestamp_CET', 'gesamt']
+    energydata = pd.DataFrame(columns=col_names)
+    
+    # loop over all available timestamps
+    for stamp in tqdm(timestamps):
+
+        dataurl = "https://www.smard.de/app/chart_data/410/DE/410_DE_quarterhour_" + str(stamp) + ".json"
+        response = requests.get(dataurl)
+        rawdata = response.json()["series"]
+
+        for i in range(len(rawdata)):
+            rawdata[i][0] = datetime.fromtimestamp(int(str(rawdata[i][0])[:10])).strftime("%Y-%m-%d %H:%M:%S")
+
+        if energydata.empty:
+            energydata = pd.DataFrame(rawdata, columns=col_names)
+        else: 
+            energydata = pd.concat([energydata, pd.DataFrame(rawdata, columns=col_names)])
+
+    energydata = energydata.dropna()
+    energydata["timestamp_CET"] = pd.to_datetime(energydata.timestamp_CET).dt.tz_localize('CET', ambiguous='infer')
+    energydata['timestamp_UTC'] = energydata['timestamp_CET'].dt.tz_convert('UTC')
+    
+    # set UTC date_time as index
+    energydata.set_index("timestamp_UTC", inplace=True)
+
+    return energydata
 
 def get_energy_data_today(to_date=None, recycle=False) :
 
