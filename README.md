@@ -74,8 +74,8 @@ in theory :
 
     AIC estimates the model's likelihood of a new observation coming from the same distribution. 
     It does so based on in-sample information, i.e. uses in-sample likelihood and penalizes it for overfitting. 
-    To underline, AIC does not measure in-sample fit, it estimates out-of-sample fit (expected likelihood of a new observation).
-    (see https://stats.stackexchange.com/questions/159807/arma-garch-model-selection-fit-evaluation?rq=1#:~:text=AIC%20estimates%20the%20model%27s%20likelihood%20of%20a%20new%20observation%20coming%20from%20the%20same%20distribution)
+    To underline, AIC does not measure in-sample fit, it estimates out-of-sample fit (expected likelihood of a new observation). 
+    (Richard Hardy in https://stats.stackexchange.com/questions/159807)
 
 create results df with:
 
