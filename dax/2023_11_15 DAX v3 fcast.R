@@ -194,7 +194,11 @@ for (jj in 1:5){
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # plot against baseline #### 
 
-pred_mean <- (pred_baseline + pred_ret + pred_garch) / 3
+w_base  <- 0.3
+w_qr    <- 0.4
+w_garch <- 0.3
+weight_sum <- w_base + w_qr + w_garch
+pred_mean <- (w_base * pred_baseline + w_qr * pred_ret + w_garch * pred_garch) / weight_sum
 
 quantile_comparison_plot(list(pred_baseline, pred_ret, pred_garch, pred_mean),
                          model_names = c("Base", "QR", "GARCH", "comb"))
