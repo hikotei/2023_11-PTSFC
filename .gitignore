@@ -2,6 +2,7 @@
 .RData
 .Rhistory
 .ipynb_checkpoints
+.pkl
 
 # ignore folder "__pycache__/"
 __pycache__/
