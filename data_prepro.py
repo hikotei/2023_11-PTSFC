@@ -128,7 +128,7 @@ def get_energy_data_json():
 
 def get_energy_data_today(to_date=None, recycle=False) :
 
-    os.chdir("C:/2023_11-PTSFC")
+    # os.chdir("C:/2023_11-PTSFC")
     # os.chdir("../2023_11-PTSFC")
     print(f"> cwd = {os.getcwd()}")
 
