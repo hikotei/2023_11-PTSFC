@@ -88,7 +88,7 @@ def fit_grad_boost(X_train, y_train, quantiles):
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # PLOT
     
-def plot_quantile_fcast(df_in, fcast_idx, title=''):
+def plot_quantile_fcast(df_in, fcast_idx, y_true=None, title=''):
 
     plt.figure(figsize=(15, 5))
     plt.title(f'{title} - quantile plot')
@@ -104,8 +104,6 @@ def plot_quantile_fcast(df_in, fcast_idx, title=''):
     plt.fill_between(df_in['timestamp_CET'], df_in['q 0.025'], df_in['q 0.975'], color='lightblue', alpha=0.1)
     plt.fill_between(df_in['timestamp_CET'], df_in['q 0.250'], df_in['q 0.750'], color='mediumblue', alpha=0.1)
 
-    # submission period 1 = fcast_idx[:3]
-    # submission period 2 = fcast_idx[3:]
     plt.axvspan(fcast_idx[0], fcast_idx[2], alpha=0.2, color='grey')
     plt.axvspan(fcast_idx[3], fcast_idx[5], alpha=0.2, color='grey')
 
@@ -113,6 +111,10 @@ def plot_quantile_fcast(df_in, fcast_idx, title=''):
     for timestamp in fcast_idx:
         plt.axvline(timestamp, color='grey', linestyle='--', lw=1)
 
-    plt.ylim(20_000, 80_000)
+    # plot true values if available
+    if y_true is not None:
+        plt.plot(y_true['timestamp_CET'], y_true['gesamt'], lw=1, color='red', label='actual')
+
+    plt.ylim(20_000, 85_000)
     plt.legend()
     plt.show()
