@@ -2,30 +2,84 @@
 
 import os
 import time
-import pickle
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 # import pmdarima as pm
-from sklearn.linear_model import QuantileRegressor, LinearRegression
-from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor
+import lightgbm as lgb
+from sklearn.linear_model import QuantileRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+import statsmodels.api as sm
 
-from datetime import datetime
-from itertools import product
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+# LightGBM
+    
+def fit_lightgbm(X_train, y_train, quantiles):
 
-import platform
-if 'win' in platform.platform():
-    os.environ['R_HOME'] = 'C:\Program Files\R\R-4.3.2'
+    print('- '*15)
+    print('> start fitting LightGBM models ...')
+
+    # start counting time
+    start_time = time.time()
+    all_models = {}
+
+    params = {
+        'objective': 'quantile',
+        'metric': 'quantile',
+        'max_depth': 4,
+        'num_leaves': 15,
+        'learning_rate': 0.1,
+        'n_estimators': 100,
+        'boosting_type': 'gbdt'
+        }
+
+    for alpha in quantiles:
+
+        print(f'>> alpha = {alpha:.3f} ...')
+        lgbm_model = lgb.LGBMRegressor(alpha=alpha, **params).fit(X_train, y_train)
+        all_models[f"q {alpha:.3f}"] = lgbm_model
+
+    # print time taken
+    print('- '*15) 
+    print(f"> time taken: {time.time() - start_time:.2f} seconds")
+    print('- '*15)
+
+    return all_models
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # Quant Reg Model
 
+def fit_quant_reg_sm(X_train, y_train, quantiles):
+
+    print('- '*15)  
+    print('> start fitting quantile regression models (statsmodels) ...')
+
+    # start counting time
+    start_time = time.time()
+    all_models_quant_reg = {}
+
+    for alpha in quantiles:
+
+        print(f'>> alpha = {alpha:.3f} ...')
+        quantile_regressor = sm.QuantReg(y_train, X_train).fit(q=alpha, vcov='iid', max_iter=5000)
+        all_models_quant_reg[f"q {alpha:.3f}"] = quantile_regressor
+
+        """ print coefficients of quant reg model to check for feasibility """
+        # print(quantile_regressor.params)
+
+    # print time taken
+    print('- '*15) 
+    print(f"> time taken: {time.time() - start_time:.2f} seconds")
+    print('- '*15)
+
+    return all_models_quant_reg
+
 def fit_quant_reg(X_train, y_train, quantiles):
 
     print('- '*15)  
-    print(f'> start training quantile regression models ...')
+    print('> start training quantile regression models ...')
 
     # start counting time
     start_time = time.time()
@@ -52,7 +106,7 @@ def fit_quant_reg(X_train, y_train, quantiles):
 def fit_grad_boost(X_train, y_train, quantiles):
 
     print('- '*15)  
-    print(f'> start training gradient boosting models ...')
+    print('> start training gradient boosting models ...')
 
     quantile_params = {0.025: {'learning_rate': 0.4, 'max_depth': 10, 'min_samples_leaf': 7, 'n_estimators': 400, 'subsample': 0.9}, 
                        0.250: {'learning_rate': 0.3, 'max_depth': 10, 'min_samples_leaf': 6, 'n_estimators': 250, 'subsample': 0.7},
