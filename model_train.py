@@ -76,18 +76,20 @@ def fit_quant_reg_sm(X_train, y_train, quantiles):
 
     return all_models_quant_reg
 
-def fit_quant_reg(X_train, y_train, quantiles):
+def fit_quant_reg(X_train, y_train, quantiles, verbose=True):
 
-    print('- '*15)  
-    print('> start training quantile regression models ...')
+    if verbose:
+        print('- '*15)  
+        print('> start training quantile regression models ...')
 
-    # start counting time
-    start_time = time.time()
+        # start counting time
+        start_time = time.time()
+        
     all_models_quant_reg = {}
 
     for alpha in quantiles:
 
-        print(f'>> alpha = {alpha:.3f} ...')
+        if verbose: print(f'>> alpha = {alpha:.3f} ...')
         quantile_regressor = QuantileRegressor(quantile=alpha, alpha=0, solver='highs')
         all_models_quant_reg[f"q {alpha:.3f}"] = quantile_regressor.fit(X_train, y_train)
 
@@ -96,17 +98,22 @@ def fit_quant_reg(X_train, y_train, quantiles):
         # df_coef_w_names = pd.DataFrame(quantile_regressor.coef_, index=quantile_regressor.feature_names_in_)
         # print(df_coef_w_names.to_string())
 
-    # print time taken
-    print('- '*15) 
-    print(f"> time taken: {time.time() - start_time:.2f} seconds")
-    print('- '*15)
+    if verbose: 
+        # print time taken
+        print('- '*15) 
+        print(f"> time taken: {time.time() - start_time:.2f} seconds")
+        print('- '*15)
 
     return all_models_quant_reg
 
-def fit_grad_boost(X_train, y_train, quantiles):
+def fit_grad_boost(X_train, y_train, quantiles, verbose=True):
 
-    print('- '*15)  
-    print('> start training gradient boosting models ...')
+    if verbose:
+        print('- '*15)  
+        print(f'> start training gradient boosting models ...')
+
+        # start counting time
+        start_time = time.time()
 
     quantile_params = {0.025: {'learning_rate': 0.4, 'max_depth': 10, 'min_samples_leaf': 7, 'n_estimators': 400, 'subsample': 0.9}, 
                        0.250: {'learning_rate': 0.3, 'max_depth': 10, 'min_samples_leaf': 6, 'n_estimators': 250, 'subsample': 0.7},
@@ -114,13 +121,11 @@ def fit_grad_boost(X_train, y_train, quantiles):
                        0.750: {'learning_rate': 0.2, 'max_depth': 5, 'min_samples_leaf': 7, 'n_estimators': 250, 'subsample': 0.7},
                        0.975: {'learning_rate': 0.4, 'max_depth': 10, 'min_samples_leaf': 6, 'n_estimators': 400, 'subsample': 0.7}}
     
-    # start counting time
-    start_time = time.time()
     all_models_grad_boost = {}
 
     for alpha in quantiles:
 
-        print(f'>> alpha = {alpha:.3f} ...')
+        if verbose: print(f'>> alpha = {alpha:.3f} ...')
         params = quantile_params[alpha]
 
         # Use the QuantileRegressor for faster training on small to medium datasets n < 10_000
@@ -131,10 +136,11 @@ def fit_grad_boost(X_train, y_train, quantiles):
 
         all_models_grad_boost[f"q {alpha:.3f}"] = gbr.fit(X_train, y_train)
 
-    # print time taken
-    print('- '*15) 
-    print(f"> time taken: {time.time() - start_time:.2f} seconds")
-    print('- '*15)
+    if verbose:
+        # print time taken
+        print('- '*15) 
+        print(f"> time taken: {time.time() - start_time:.2f} seconds")
+        print('- '*15)
 
     return all_models_grad_boost
 
