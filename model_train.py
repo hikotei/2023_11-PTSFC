@@ -9,70 +9,96 @@ import matplotlib.pyplot as plt
 
 # import pmdarima as pm
 import lightgbm as lgb
+import xgboost as xgb
 from sklearn.linear_model import QuantileRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 import statsmodels.api as sm
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
-# LightGBM
-    
-def fit_lightgbm(X_train, y_train, quantiles):
+# XGBoost
 
-    print('- '*15)
-    print('> start fitting LightGBM models ...')
+def fit_xgboost(X_train, y_train, quantiles):
+
+    print('- ' * 15)
+    print('> start fitting XGBoost models ...')
 
     # start counting time
     start_time = time.time()
     all_models = {}
 
     params = {
-        'objective': 'quantile',
-        'metric': 'quantile',
+        'objective': 'reg:quantileerror',
+        'eval_metric': 'quantile',
         'max_depth': 4,
-        'num_leaves': 15,
         'learning_rate': 0.1,
         'n_estimators': 100,
-        'boosting_type': 'gbdt'
-        }
+        'booster': 'gbtree',
+    }
+
+    for alpha in quantiles:
+        xgb_model = xgb.XGBRegressor(quantile_alpha=alpha, **params).fit(X_train, y_train)
+        all_models[f"q {alpha:.3f}"] = xgb_model
+
+    # print time taken
+    print(f"> time taken: {time.time() - start_time:.2f} seconds")
+    print('- ' * 15)
+
+    return all_models
+
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+# LightGBM
+    
+def fit_lightgbm(X_train, y_train, quantiles, quantile_params):
+
+    # print('- '*15)
+    # print('> start fitting LightGBM models ...')
+
+    # start counting time
+    # start_time = time.time()
+    all_models = {}
 
     for alpha in quantiles:
 
-        print(f'>> alpha = {alpha:.3f} ...')
-        lgbm_model = lgb.LGBMRegressor(alpha=alpha, **params).fit(X_train, y_train)
+        # print(f'>> alpha = {alpha:.3f} ...')
+        # params = quantile_params[alpha]
+        lgbm_model = lgb.LGBMRegressor(alpha=alpha, **quantile_params).fit(X_train, y_train)
         all_models[f"q {alpha:.3f}"] = lgbm_model
 
     # print time taken
-    print('- '*15) 
-    print(f"> time taken: {time.time() - start_time:.2f} seconds")
-    print('- '*15)
+    # print('- '*15) 
+    # print(f"> time taken: {time.time() - start_time:.2f} seconds")
+    # print('- '*15)
 
     return all_models
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # Quant Reg Model
 
-def fit_quant_reg_sm(X_train, y_train, quantiles):
+def fit_quant_reg_sm(X_train, y_train, quantiles, verbose=True):
 
-    print('- '*15)  
-    print('> start fitting quantile regression models (statsmodels) ...')
+    if verbose: 
+        print('- '*15)  
+        print('> start fitting quantile regression models (statsmodels) ...')
 
-    # start counting time
-    start_time = time.time()
+        # start counting time
+        start_time = time.time()
+
     all_models_quant_reg = {}
 
     for alpha in quantiles:
 
-        print(f'>> alpha = {alpha:.3f} ...')
+        if verbose: print(f'>> alpha = {alpha:.3f} ...')
         quantile_regressor = sm.QuantReg(y_train, X_train).fit(q=alpha, vcov='iid', max_iter=5000)
         all_models_quant_reg[f"q {alpha:.3f}"] = quantile_regressor
 
         """ print coefficients of quant reg model to check for feasibility """
         # print(quantile_regressor.params)
-
-    # print time taken
-    print('- '*15) 
-    print(f"> time taken: {time.time() - start_time:.2f} seconds")
-    print('- '*15)
+        
+    if verbose: 
+        # print time taken
+        print('- '*15) 
+        print(f"> time taken: {time.time() - start_time:.2f} seconds")
+        print('- '*15)
 
     return all_models_quant_reg
 
