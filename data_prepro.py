@@ -179,7 +179,7 @@ def get_energy_data_today(to_date=None, recycle=False) :
     # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
     
     # if to_date is earlier than 2023_11_01, use historic data only
-    hist_fname = f"Realisierter_Stromverbrauch_201501010000_202310312359_Viertelstunde.csv"
+    hist_fname = "Realisierter_Stromverbrauch_201501010000_202310312359_Viertelstunde.csv"
     hist_df = pd.read_csv(f"./data/{hist_fname}", sep=";", decimal=",")
     # Rename columns for convenience and remove cols = ['residual', 'pump']
     hist_df.columns = ["datum", "anfang", "ende", "gesamt", "residual", "pump"]
