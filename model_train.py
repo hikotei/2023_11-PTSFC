@@ -17,23 +17,14 @@ import statsmodels.api as sm
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # XGBoost
 
-def fit_xgboost(X_train, y_train, quantiles):
+def fit_xgboost(X_train, y_train, quantiles, params):
 
-    print('- ' * 15)
-    print('> start fitting XGBoost models ...')
+    # print('- ' * 15)
+    # print('> start fitting XGBoost models ...')
 
     # start counting time
     start_time = time.time()
     all_models = {}
-
-    params = {
-        'objective': 'reg:quantileerror',
-        'eval_metric': 'quantile',
-        'max_depth': 4,
-        'learning_rate': 0.1,
-        'n_estimators': 100,
-        'booster': 'gbtree',
-    }
 
     for alpha in quantiles:
         xgb_model = xgb.XGBRegressor(quantile_alpha=alpha, **params).fit(X_train, y_train)
@@ -41,7 +32,7 @@ def fit_xgboost(X_train, y_train, quantiles):
 
     # print time taken
     print(f"> time taken: {time.time() - start_time:.2f} seconds")
-    print('- ' * 15)
+    # print('- ' * 15)
 
     return all_models
 
