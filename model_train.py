@@ -17,7 +17,7 @@ import statsmodels.api as sm
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # XGBoost
 
-def fit_xgboost(X_train, y_train, quantiles, params):
+def fit_xgboost(X_train, y_train, quantiles):
 
     # print('- ' * 15)
     # print('> start fitting XGBoost models ...')
@@ -26,7 +26,22 @@ def fit_xgboost(X_train, y_train, quantiles, params):
     start_time = time.time()
     all_models = {}
 
+    base_params = {'booster': 'gbtree', 'eval_metric': 'quantile', 'objective': 'reg:quantileerror'}
+
+    p0 = dict(base_params, max_depth=4, n_estimators=100, learning_rate=0.2)
+    p1 = dict(base_params, max_depth=4, n_estimators=200, learning_rate=0.2)
+    p2 = dict(base_params, max_depth=10, n_estimators=100, learning_rate=0.2)
+    p3 = dict(base_params, max_depth=10, n_estimators=200, learning_rate=0.2)
+
+    quantile_params = {
+        0.025: p3, 
+        0.250: p0,
+        0.500: p0,
+        0.750: p1,
+        0.975: p2}
+
     for alpha in quantiles:
+        params = quantile_params[alpha]
         xgb_model = xgb.XGBRegressor(quantile_alpha=alpha, **params).fit(X_train, y_train)
         all_models[f"q {alpha:.3f}"] = xgb_model
 
@@ -39,7 +54,7 @@ def fit_xgboost(X_train, y_train, quantiles, params):
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 # LightGBM
     
-def fit_lightgbm(X_train, y_train, quantiles, quantile_params):
+def fit_lightgbm(X_train, y_train, quantiles):
 
     # print('- '*15)
     # print('> start fitting LightGBM models ...')
@@ -48,11 +63,24 @@ def fit_lightgbm(X_train, y_train, quantiles, quantile_params):
     # start_time = time.time()
     all_models = {}
 
+    base_params = {'boosting_type': 'gbdt', 'verbose': -1}
+
+    p4 = dict(base_params, learning_rate=0.1, max_depth=4, n_estimators=100, num_leaves=15)
+    p5 = dict(base_params, learning_rate=0.1, max_depth=4, n_estimators=200, num_leaves=15)
+    p23 = dict(base_params, learning_rate=0.3, max_depth=10, n_estimators=200, num_leaves=20)
+
+    quantile_params = {
+        0.025: p4, 
+        0.250: p4,
+        0.500: p5,
+        0.750: p23,
+        0.975: p23}
+
     for alpha in quantiles:
 
         # print(f'>> alpha = {alpha:.3f} ...')
-        # params = quantile_params[alpha]
-        lgbm_model = lgb.LGBMRegressor(alpha=alpha, **quantile_params).fit(X_train, y_train)
+        params = quantile_params[alpha]
+        lgbm_model = lgb.LGBMRegressor(alpha=alpha, **params).fit(X_train, y_train)
         all_models[f"q {alpha:.3f}"] = lgbm_model
 
     # print time taken

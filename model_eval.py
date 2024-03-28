@@ -177,3 +177,38 @@ def eval_fcast(df_fcast, df_energy_new, subm_timestamps, quantiles):
     df_error_metrics.loc["avg", :] = df_error_metrics.mean(axis=0)
 
     return df_error_metrics
+
+def eval_fcast_qscore(df_fcast, df_energy_new, subm_timestamps, quantiles):
+
+    actual_df = df_energy_new.loc[
+        df_energy_new["timestamp_CET"].isin(df_fcast["timestamp_CET"])
+    ]
+
+
+    df_error_metrics = pd.DataFrame(index=subm_timestamps)
+    for timestamp in subm_timestamps:
+        try:
+            for q in quantiles:
+                quantile_score = (
+                    mean_pinball_loss(
+                        actual_df.loc[
+                            actual_df["timestamp_CET"] == timestamp, "gesamt"
+                        ].values,
+                        df_fcast.loc[
+                            df_fcast["timestamp_CET"] == timestamp, f"q {q:.3f}"
+                        ].values,
+                        alpha=q,
+                    )
+                    / 1000
+                    * 2
+                )
+                # save in df
+                df_error_metrics.loc[timestamp, f"q-score {q:.3f}"] = quantile_score
+        except:
+            print(f"error computing error metrics for {timestamp}")
+
+    # add last row to df_error_metrics which is the avg of the cols
+    df_error_metrics.loc["avg", :] = df_error_metrics.mean(axis=0)
+
+    return df_error_metrics
+
