@@ -174,7 +174,7 @@ def eval_fcast(df_fcast, df_energy_new, subm_timestamps, quantiles):
             print(f"error computing error metrics for {timestamp}")
 
     # add last row to df_error_metrics which is the avg of the cols
-    df_error_metrics.loc["avg", :] = df_error_metrics.mean(axis=0)
+    # df_error_metrics.loc["avg", :] = df_error_metrics.mean(axis=0)
 
     return df_error_metrics
 
@@ -208,7 +208,7 @@ def eval_fcast_qscore(df_fcast, df_energy_new, subm_timestamps, quantiles):
             print(f"error computing error metrics for {timestamp}")
 
     # add last row to df_error_metrics which is the avg of the cols
-    df_error_metrics.loc["avg", :] = df_error_metrics.mean(axis=0)
+    # df_error_metrics.loc["avg", :] = df_error_metrics.mean(axis=0)
 
     return df_error_metrics
 

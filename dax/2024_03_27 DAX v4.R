@@ -60,8 +60,15 @@ names(DAX_prices) <- c("date", "price")
                ret2_abs_lag1 = abs(lag(ret2, 1)),
                
                ret3 = compute_return(price, h = 3),
+               ret3_abs_lag1 = abs(lag(ret3, 1)),
+               
                ret4 = compute_return(price, h = 4),
-               ret5 = compute_return(price, h = 5)) %>% slice(6:n()) # Cut off the first 5 rows
+               ret4_abs_lag1 = abs(lag(ret4, 1)),
+               
+               ret5 = compute_return(price, h = 5),
+               ret5_abs_lag1 = abs(lag(ret5, 1))) %>% 
+
+        slice(6:n()) # Cut off the first 5 rows since NA due to ret5
 
 plot(DAX_returns$price, type='l')
 plot(DAX_returns$ret1, type='l')
@@ -116,38 +123,55 @@ for (i in 1:5) {
 # y = cumulative log returns h=i
 # x = ret sqrd of yesterday
 
-rqfit_ret1 <- rq(ret1 ~ ret1_sqrd_lag1 + ret1_abs_lag1 + ret2_abs_lag1, 
-                 tau = tau_arr, data = DAX_returns_train)
+gen_quant_reg_pred <- function(input_vector, return_variables, tau_arr, train_data) {
+    
+    rqfit_list <- list()
+    
+    for (ret_var in return_variables) {
+        formula <- paste(ret_var, "~", paste(input_vector, collapse=" + "))
+        rqfit_ret <- rq(formula, tau = tau_arr, data = DAX_returns_train)
+        rqfit_list[[ret_var]] <- rqfit_ret
+    }
+    
+    DAX_returns_train <- DAX_returns_train %>%
+        mutate(
+            pred_ret1 = predict(rqfit_list$ret1, newdata = ., interval = "confidence"),
+            pred_ret2 = predict(rqfit_list$ret2, newdata = ., interval = "confidence"),
+            pred_ret3 = predict(rqfit_list$ret3, newdata = ., interval = "confidence"),
+            pred_ret4 = predict(rqfit_list$ret4, newdata = ., interval = "confidence"),
+            pred_ret5 = predict(rqfit_list$ret5, newdata = ., interval = "confidence")
+        )
+    
+    pred_ret <- t(rbind(DAX_returns_train$pred_ret1[n_train-4,], 
+                        DAX_returns_train$pred_ret2[n_train-3,], 
+                        DAX_returns_train$pred_ret3[n_train-2,],
+                        DAX_returns_train$pred_ret4[n_train-1,], 
+                        DAX_returns_train$pred_ret5[n_train,]))
+    
+    return(pred_ret)
+    
+}
 
-rqfit_ret2 <- rq(ret2 ~ ret1_sqrd_lag1 + ret1_abs_lag1 + ret2_abs_lag1, 
-                 tau = tau_arr, data = DAX_returns_train)
+return_variables <- c("ret1", "ret2", "ret3", "ret4", "ret5")
 
-rqfit_ret3 <- rq(ret3 ~ ret1_sqrd_lag1 + ret1_abs_lag1 + ret2_abs_lag1, 
-                 tau = tau_arr, data = DAX_returns_train)
+input_vectors <- list(c("ret1_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
+                      c("ret1_sqrd_lag1","ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
+                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
+                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1"),
+                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1"),
+                      c("ret1_abs_lag1", "ret2_abs_lag1"))
 
-rqfit_ret4 <- rq(ret4 ~ ret1_sqrd_lag1 + ret1_abs_lag1 + ret2_abs_lag1, 
-                 tau = tau_arr, data = DAX_returns_train)
+pred_quant_reg_list <- list()
 
-rqfit_ret5 <- rq(ret5 ~ ret1_sqrd_lag1 + ret1_abs_lag1 + ret2_abs_lag1, 
-                 tau = tau_arr, data = DAX_returns_train)
+for (i in seq_along(input_vectors)) {
 
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# QR predictions on test set
+    pred_quant_reg <- gen_quant_reg_pred(input_vectors[[i]], return_variables, 
+                                         tau_arr, DAX_returns_train)
+    pred_quant_reg_list[[i]] <- pred_quant_reg
+    
+}
 
-DAX_returns_train <- DAX_returns_train %>%
-    mutate(
-        pred_ret1 = predict(rqfit_ret1, newdata = ., interval = "confidence"),
-        pred_ret2 = predict(rqfit_ret2, newdata = ., interval = "confidence"),
-        pred_ret3 = predict(rqfit_ret3, newdata = ., interval = "confidence"),
-        pred_ret4 = predict(rqfit_ret4, newdata = ., interval = "confidence"),
-        pred_ret5 = predict(rqfit_ret5, newdata = ., interval = "confidence")
-    )
-
-pred_ret <- t(rbind(DAX_returns_train$pred_ret1[n_train-4,], 
-                    DAX_returns_train$pred_ret2[n_train-3,], 
-                    DAX_returns_train$pred_ret3[n_train-2,],
-                    DAX_returns_train$pred_ret4[n_train-1,], 
-                    DAX_returns_train$pred_ret5[n_train,]))
+pred_quant_reg_1 <- pred_quant_reg_list[[1]]
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # Check Quantile Crossing
@@ -169,7 +193,7 @@ reorder_rows <- function(mat) {
 }
 
 # Reorder rows if quantile crossing is detected
-pred_ret <- reorder_rows(pred_ret)
+pred_quant_reg_1 <- reorder_rows(pred_quant_reg_1)
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # fit ARMA GARCH ####
@@ -229,7 +253,6 @@ for (jj in 1:5){
         
     }
 }
-
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # baseline model ####
@@ -303,8 +326,10 @@ calculate_qscore_matrices <- function(pred_mat, y_vec, quantiles) {
     return(ret_list)
 }
 
-preds <- list(pred_baseline, pred_ret, pred_garch_stdnorm)
-
+preds <- c(pred_baseline, pred_garch_stdnorm)
+# add list of preds = pred_quant_reg_list to this list
+preds <- c(preds, pred_quant_reg_list)
+names <- c("baseline", "garch_stdnorm", )
 for (pred in preds){
     
     qscore_mat <- calculate_qscore_matrix(pred, DAX_cumul_ret_true, tau_arr)
@@ -313,6 +338,7 @@ for (pred in preds){
     
 }
 
+
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # plot ensemble against baseline #### 
 
@@ -320,11 +346,10 @@ w_base  <- 0.3
 w_qr    <- 0.4
 w_garch <- 0.3
 weight_sum <- w_base + w_qr + w_garch
-pred_mean <- (w_base * pred_baseline + w_qr * pred_ret + w_garch * pred_garch_stdnorm) / weight_sum
+pred_mean <- (w_base * pred_baseline + w_qr * pred_quant_reg_1 + w_garch * pred_garch_stdnorm) / weight_sum
 
-quantile_comparison_plot(list(pred_baseline, pred_ret, pred_garch_stdnorm, pred_mean),
+quantile_comparison_plot(list(pred_baseline, pred_quant_reg_1, pred_garch_stdnorm, pred_mean),
                          model_names = c("Base", "QR", "GARCH", "comb"))
 
 abline(h = 0, lwd = .5, lty = 2)
-
 
