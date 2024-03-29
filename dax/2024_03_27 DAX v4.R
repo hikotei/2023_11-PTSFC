@@ -50,28 +50,30 @@ names(DAX_prices) <- c("date", "price")
 # compute cumulative log returns
 
     DAX_returns <- DAX_prices %>%
-        mutate(ret1_sqrd = compute_return(price, h = 1)^2,
-               ret1_sqrd_lag1 = lag(ret1_sqrd, 1),
-               
-               ret1 = compute_return(price, h = 1), 
+        mutate(ret1 = compute_return(price, h = 1), 
                ret1_abs_lag1 = abs(lag(ret1, 1)),
+               ret1_sqrd_lag1 = lag(ret1^2, 1),
                
                ret2 = compute_return(price, h = 2),
                ret2_abs_lag1 = abs(lag(ret2, 1)),
+               ret2_sqrd_lag1 = lag(ret2^2, 1),
                
                ret3 = compute_return(price, h = 3),
                ret3_abs_lag1 = abs(lag(ret3, 1)),
+               ret3_sqrd_lag1 = lag(ret3^2, 1),
                
                ret4 = compute_return(price, h = 4),
                ret4_abs_lag1 = abs(lag(ret4, 1)),
+               ret4_sqrd_lag1 = lag(ret4^2, 1),
                
                ret5 = compute_return(price, h = 5),
-               ret5_abs_lag1 = abs(lag(ret5, 1))) %>% 
+               ret5_abs_lag1 = abs(lag(ret5, 1)),
+               ret5_sqrd_lag1 = lag(ret5^2, 1)) %>% 
 
         slice(6:n()) # Cut off the first 5 rows since NA due to ret5
 
-plot(DAX_returns$price, type='l')
-plot(DAX_returns$ret1, type='l')
+# plot(DAX_returns$price, type='l')
+# plot(DAX_returns$ret1, type='l')
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -90,31 +92,6 @@ DAX_returns_train <- DAX_returns %>%
     filter(date <= fcast_date) 
 
 n_train <- nrow(DAX_returns_train)
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# Check Distribution
-
-for (i in 1:5) {
-    
-    data <- DAX_returns_train[[paste0("ret", i)]]
-    
-    title <- paste0(i, "-period Return Histogram with KDE")
-    hist(data, breaks = 'FD', freq = FALSE, main = title, ylim = c(0,0.5))
-    dens <- density(data) # Perform Kernel Density Estimation (KDE)
-    lines(dens, col = "blue") # Plot KDE
-    
-    # Plot fitted gen hyp PDF
-    ghyp_fit <- fit.ghypuv(data, lambda = 1, alpha.bar = 0.5, mu = median(data),
-                           sigma = mad(data), gamma = 0, silent = TRUE)
-    curve(dghyp(x, object = ghyp_fit, logvalue = FALSE), col="orange", add = TRUE, n=500)
-    # Plot standard normal distribution PDF
-    curve(dnorm(x, mean=0, sd=1), col="green", lwd=1, add = TRUE, n=500)
-    # Plot fitted normal distribution PDF
-    curve(dnorm(x, mean = mean(data), sd = sd(data)), col="green", lwd=1, add = TRUE, n=500)
-    # Plot Student's t-distribution PDF
-    curve(dt(x, df=10), col = "red", lwd=1, add = TRUE, n=500)
-    
-}
 
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # quant reg models #### 
@@ -154,12 +131,24 @@ gen_quant_reg_pred <- function(input_vector, return_variables, tau_arr, train_da
 
 return_variables <- c("ret1", "ret2", "ret3", "ret4", "ret5")
 
-input_vectors <- list(c("ret1_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
+lag1_colnames <- grep("lag1", colnames(DAX_returns), value = TRUE)
+combinations <- combn(lag1_colnames, 2, simplify = FALSE) # return as vector
+
+input_vectors <- list(c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
+                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret1_abs_lag1"),
+                      c("ret1_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
+                      
                       c("ret1_sqrd_lag1","ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
+                      
+                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1", "ret4_sqrd_lag1", "ret5_sqrd_lag1"),
+                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1", "ret4_sqrd_lag1"),
+                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1"),
+                      
                       c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
                       c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1"),
-                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1"),
-                      c("ret1_abs_lag1", "ret2_abs_lag1"))
+                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1"))
+
+input_vectors <- c(input_vectors, combinations)
 
 pred_quant_reg_list <- list()
 
@@ -326,30 +315,26 @@ calculate_qscore_matrices <- function(pred_mat, y_vec, quantiles) {
     return(ret_list)
 }
 
-preds <- c(pred_baseline, pred_garch_stdnorm)
-# add list of preds = pred_quant_reg_list to this list
+preds <- list(pred_baseline, pred_garch_stdnorm)
 preds <- c(preds, pred_quant_reg_list)
-names <- c("baseline", "garch_stdnorm", )
-for (pred in preds){
-    
-    qscore_mat <- calculate_qscore_matrix(pred, DAX_cumul_ret_true, tau_arr)
-    mean_qscore <- mean(qscore_mat)
-    print(mean_qscore)
-    
+
+quant_reg_names <- sapply(input_vectors, function(x) paste('quant_reg :', paste(x, collapse = ' + ')))
+model_names <- c("baseline", "garch_stdnorm", quant_reg_names)
+
+mean_scores <- numeric(length(preds))
+# Calculate mean scores and store names
+for (i in seq_along(preds)){
+    qscore_mat <- calculate_qscore_matrix(preds[[i]], DAX_cumul_ret_true, tau_arr)
+    mean_scores[i] <- mean(qscore_mat)
 }
 
+result_df <- data.frame(Model = model_names, Mean_Score = mean_scores)
+result_df <- result_df[order(result_df$Mean_Score), ]
 
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# plot ensemble against baseline #### 
+# for each week
+# need to save fcasts
+# need to save true values
 
-w_base  <- 0.3
-w_qr    <- 0.4
-w_garch <- 0.3
-weight_sum <- w_base + w_qr + w_garch
-pred_mean <- (w_base * pred_baseline + w_qr * pred_quant_reg_1 + w_garch * pred_garch_stdnorm) / weight_sum
-
-quantile_comparison_plot(list(pred_baseline, pred_quant_reg_1, pred_garch_stdnorm, pred_mean),
-                         model_names = c("Base", "QR", "GARCH", "comb"))
-
-abline(h = 0, lwd = .5, lty = 2)
-
+# 2 csv files for each week
+# index = timestamp
+# cols = modelname (eg quant_reg), quantiles

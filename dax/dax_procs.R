@@ -53,9 +53,9 @@ quantile_comparison_plot <- function(pred_list,
     }
   }
   
-  legend(1, max(rg_pl) + 2, model_names, bty = "n", col = model_colors, 
-         pch = 20, horiz = TRUE, xpd = TRUE, cex = font_size)
-  
+  legend(0.5, max(rg_pl)+2.5, model_names, bty="n", col=model_colors,
+         pch=20, horiz=TRUE, xpd=TRUE, cex=font_size*0.5)
+ 
 }
 
 qs <- function(x, y, tau){
