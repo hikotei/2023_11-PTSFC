@@ -122,6 +122,7 @@ for (i in 1:5) {
     m <- coef(t_fit)[[1]]
     s <- coef(t_fit)[[2]]
     df <- coef(t_fit)[[3]]
+    print(df)
     curve(dt(x, ncp=m/s, df=1), col="red", lwd=1, add = TRUE, n=500)
     
 }

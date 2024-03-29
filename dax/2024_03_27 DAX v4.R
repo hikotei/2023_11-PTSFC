@@ -194,7 +194,7 @@ all_model_scores_df <- data.frame()
 # Record start time
 start_time_full <- Sys.time()
 
-for (week_idx in seq_along(wednesdays[1:2])){
+for (week_idx in seq_along(wednesdays)){
     
     # Record start time
     start_time <- Sys.time()
@@ -281,101 +281,69 @@ for (week_idx in seq_along(wednesdays[1:2])){
     # = = = = = = = = = = = = = = = = = = = = = = = = = =
     # fit ARMA GARCH ####
     
-    # sGARCH = standard GARCH
-    spec_garch  <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(3,1)), 
-                              mean.model = list(armaOrder = c(6, 6)))
-    
-    garch_model <- ugarchfit(spec_garch, DAX_returns_train[2:n_train,5])
-    garch_fcast <- ugarchforecast(garch_model, n.ahead=5)
-    
-    # - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # calc cumulative log returns
-    
-    garch_fcast_cumulative <- numeric(5)
-    prev_ret <- 0
-    
-    for (idx in 1:5) {
-        ret <- fitted(garch_fcast)[idx] + prev_ret
-        garch_fcast_cumulative[idx] <- ret
-        prev_ret <- prev_ret + fitted(garch_fcast)[idx]
-    }
-    
-    # - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # generate prediction quantiles assuming normal distribution 
-    # using GARCH sigma's
-    
-    # initialize matrix (rows are quantile levels, cols are horizons)
-    pred_garch_norm <- matrix(NA, nrow = length(tau_arr), ncol = 5)
-    
-    # loop over 5 fcast horizons
-    for (jj in 1:5){ 
-        for (tau_idx in seq_along(tau_arr)) {
-            
-            sd <- qnorm(tau_arr[tau_idx]) * sigma(garch_fcast)[jj]
-            pred <- garch_fcast_cumulative[jj] + sd
-            pred_garch_norm[tau_idx,jj] <- pred
-            
+    garch_dists <- c("norm", "std", "ghyp")
+    preds_garch_list <- list()
+
+    for (dist_idx in seq_along(garch_dists)) {
+        
+        dist <- garch_dists[dist_idx]
+        # sGARCH = standard GARCH
+        spec_garch  <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(3,1)), 
+                                  mean.model = list(armaOrder = c(6, 6)), 
+                                  distribution.model = dist)
+        
+        garch_model <- ugarchfit(spec_garch, DAX_returns_train[2:n_train,3])
+        garch_fcast <- ugarchforecast(garch_model, n.ahead=5)
+        
+        # v1 = use quantile fnct directly
+            # calculate cumulative returns ??? HOW
+        
+        # v2 = take pt fcasts calculate cumulative returns manually
+            # then manually add uncertainty using garch sigma  
+        
+        # - - - - - - - - - - - - - - - - - - - - - - - - - -
+        # calc cumulative log returns
+
+        garch_fcast_cumulative <- numeric(5)
+        prev_ret <- 0
+        
+        for (idx in 1:5) {
+            ret <- fitted(garch_fcast)[idx] + prev_ret
+            garch_fcast_cumulative[idx] <- ret
+            prev_ret <- prev_ret + fitted(garch_fcast)[idx]
         }
-    }
-    
-    # - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # USE DIFFERENT PARAMETRIC DISTRIBUTIONS !!!
-    
-    # initialize matrix (rows are quantile levels, cols are horizons)
-    pred_garch_tdist <- matrix(NA, nrow = length(tau_arr), ncol = 5)
-    
-    # loop over 5 fcast horizons
-    for (jj in 1:5){
+   
+        # - - - - - - - - - - - - - - - - - - - - - - - - - -
+        # generate prediction quantiles assuming normal distribution 
+        # using GARCH sigma's
         
-        t_fit <- tdist_fits_list[[jj]]
-        m <- coef(t_fit)[[1]]
-        s <- coef(t_fit)[[2]]
-        df <- coef(t_fit)[[3]]
+        # initialize matrix (rows are quantile levels, cols are horizons)
+        pred_garch <- matrix(NA, nrow = length(tau_arr), ncol = 5)
         
-        for (tau_idx in seq_along(tau_arr)) {
-        
-            sd <- qt(tau_arr[tau_idx], ncp=m/s, df=df) # * sigma(garch_fcast)[jj]
-            pred <- garch_fcast_cumulative[jj] + sd
-            pred_garch_tdist[tau_idx,jj] <- pred
-            
+        # loop over 5 fcast horizons
+        for (jj in 1:5){ 
+            for (tau_idx in seq_along(tau_arr)) {
+                
+                quantile <- qnorm(tau_arr[tau_idx])
+                sd <- quantile * sigma(garch_fcast)[jj]
+                pred <- garch_fcast_cumulative[jj] + sd
+                pred_garch[tau_idx,jj] <- pred
+                
+            }
         }
+        preds_garch_list[[dist_idx]] <- pred_garch
     }
-    
-    # - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # USE DIFFERENT PARAMETRIC DISTRIBUTIONS !!!
-    
-    # initialize matrix (rows are quantile levels, cols are horizons)
-    pred_garch_genhyp <- matrix(NA, nrow = length(tau_arr), ncol = 5)
-    
-    # loop over 5 fcast horizons
-    for (jj in 1:5){
-        
-        ghyp_fit <- ghyp_fits_list[[jj]]
-        
-        for (tau_idx in seq_along(tau_arr)) {
-            
-            sd <- qghyp(tau_arr[tau_idx], object=ghyp_fit) # * sigma(garch_fcast)[jj]
-            pred <- garch_fcast_cumulative[jj] + sd
-            pred_garch_genhyp[tau_idx,jj] <- pred
-            
-        }
-    }
-        
-    # - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # SAVE ALL IN LIST
-    
-    preds_garch_list <- c(pred_garch_norm, pred_garch_tdist, pred_garch_genhyp)
-    
+
     # = = = = = = = = = = = = = = = = = = = = = = = = = =
     # baseline model ####
     # compute baseline predictions (rolling window)
     
-    baseline_lookbacks <- c(700, 500, 400, 300, 200, 100, 50)
+    bench_lookbacks <- c(700, 500, 400, 300, 200, 100, 50)
     preds_bench_list <- list()
     
-    for ( baseline_idx in seq_along(baseline_lookbacks) ) {
+    for ( bench_idx in seq_along(bench_lookbacks) ) {
         
-        n_past_values <- baseline_lookbacks[baseline_idx]
+        n_past_values <- bench_lookbacks[bench_idx]
         
         # initialize matrix (rows are quantile levels, cols are horizons)
         pred_baseline <- matrix(NA, nrow = length(tau_arr), ncol = 5)
@@ -388,7 +356,7 @@ for (week_idx in seq_along(wednesdays[1:2])){
             # return quantiles at the specified probabilities given
             pred_baseline[,jj] <- quantile(tmp, probs = tau_arr)
         }
-        preds_bench_list[[ baseline_idx ]] <- pred_baseline
+        preds_bench_list[[ bench_idx ]] <- pred_baseline
     }
     
 
@@ -411,7 +379,9 @@ for (week_idx in seq_along(wednesdays[1:2])){
     preds <- c(preds, preds_quant_reg_list)
     
     quant_reg_names <- sapply(input_vectors, function(x) paste('quant_reg :', paste(x, collapse = ' + ')))
-    model_names <- c("baseline", "garch_stdnorm", quant_reg_names)
+    garch_names <- paste0('garch_', garch_dists)
+    bench_names <- paste('bench_', bench_lookbacks)
+    model_names <- c(bench_names,  garch_names, quant_reg_names)
 
     mean_scores <- numeric(length(preds))
     fcasts_output_df <- data.frame()
