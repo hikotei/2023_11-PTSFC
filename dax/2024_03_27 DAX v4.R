@@ -7,6 +7,7 @@ library(zoo)
 library(quantreg)
 library(MASS)
 library(ghyp)
+library(rugarch)
 
 set.seed(1103)
 
@@ -33,7 +34,7 @@ tau_arr <- c(.025, .25, .5, .75, .975) # quantile levels
 # get dax data ####
 
 start_date  <- "2020-01-01"
-fcast_date  <- "2024-02-20"
+fcast_date  <- "2024-02-22"
 
 DAX_prices = get.hist.quote(instrument="^GDAXI", 
                             start=start_date, end=fcast_date, 
@@ -72,199 +73,8 @@ names(DAX_prices) <- c("date", "price")
 
         slice(6:n()) # Cut off the first 5 rows since NA due to ret5
 
-# plot(DAX_returns$price, type='l')
-# plot(DAX_returns$ret1, type='l')
-
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-# Define start and end dates
-start_date <- as.Date("2023-11-15")
-end_date <- as.Date("2024-02-14")
-
-# Generate a sequence of Wednesdays
-wednesdays <- seq(start_date, end_date, by = "week")
-wednesdays <- wednesdays[format(wednesdays, "%u") == "3"]  # Filter only Wednesdays
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-fcast_date <- wednesdays[1]
-DAX_returns_train <- DAX_returns %>%
-    filter(date <= fcast_date) 
-
-n_train <- nrow(DAX_returns_train)
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# quant reg models #### 
-
-# all quantile regression models for h = {1,2,3,4,5}
-# y = cumulative log returns h=i
-# x = ret sqrd of yesterday
-
-gen_quant_reg_pred <- function(input_vector, return_variables, tau_arr, train_data) {
-    
-    rqfit_list <- list()
-    
-    for (ret_var in return_variables) {
-        formula <- paste(ret_var, "~", paste(input_vector, collapse=" + "))
-        rqfit_ret <- rq(formula, tau = tau_arr, data = DAX_returns_train)
-        rqfit_list[[ret_var]] <- rqfit_ret
-    }
-    
-    DAX_returns_train <- DAX_returns_train %>%
-        mutate(
-            pred_ret1 = predict(rqfit_list$ret1, newdata = ., interval = "confidence"),
-            pred_ret2 = predict(rqfit_list$ret2, newdata = ., interval = "confidence"),
-            pred_ret3 = predict(rqfit_list$ret3, newdata = ., interval = "confidence"),
-            pred_ret4 = predict(rqfit_list$ret4, newdata = ., interval = "confidence"),
-            pred_ret5 = predict(rqfit_list$ret5, newdata = ., interval = "confidence")
-        )
-    
-    pred_ret <- t(rbind(DAX_returns_train$pred_ret1[n_train-4,], 
-                        DAX_returns_train$pred_ret2[n_train-3,], 
-                        DAX_returns_train$pred_ret3[n_train-2,],
-                        DAX_returns_train$pred_ret4[n_train-1,], 
-                        DAX_returns_train$pred_ret5[n_train,]))
-    
-    return(pred_ret)
-    
-}
-
-return_variables <- c("ret1", "ret2", "ret3", "ret4", "ret5")
-
-lag1_colnames <- grep("lag1", colnames(DAX_returns), value = TRUE)
-combinations <- combn(lag1_colnames, 2, simplify = FALSE) # return as vector
-
-input_vectors <- list(c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
-                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret1_abs_lag1"),
-                      c("ret1_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
-                      
-                      c("ret1_sqrd_lag1","ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
-                      
-                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1", "ret4_sqrd_lag1", "ret5_sqrd_lag1"),
-                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1", "ret4_sqrd_lag1"),
-                      c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1"),
-                      
-                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
-                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1"),
-                      c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1"))
-
-input_vectors <- c(input_vectors, combinations)
-
-pred_quant_reg_list <- list()
-
-for (i in seq_along(input_vectors)) {
-
-    pred_quant_reg <- gen_quant_reg_pred(input_vectors[[i]], return_variables, 
-                                         tau_arr, DAX_returns_train)
-    pred_quant_reg_list[[i]] <- pred_quant_reg
-    
-}
-
-pred_quant_reg_1 <- pred_quant_reg_list[[1]]
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# Check Quantile Crossing
-
-# Function to check if a vector is strictly ascending
-is_ascending <- function(x) {
-    all(diff(x) > 0)
-}
-
-# Function to reorder matrix rows based on quantile crossing
-reorder_rows <- function(mat) {
-    n <- ncol(mat)
-    for (i in 1:n) {
-        if (!is_ascending(mat[, i])) {
-            mat[, i] <- sort(mat[, i])
-        }
-    }
-    return(mat)
-}
-
-# Reorder rows if quantile crossing is detected
-pred_quant_reg_1 <- reorder_rows(pred_quant_reg_1)
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# fit ARMA GARCH ####
-library(rugarch)
-
-spec_garch  <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(3,1)), 
-                          mean.model = list(armaOrder = c(6, 6)))
-
-garch_model <- ugarchfit(spec_garch, DAX_returns_train[2:n_train,5])
-garch_fcast <- ugarchforecast(garch_model, n.ahead=5)
-
-plot(garch_fcast, which=1)
-plot(garch_fcast, which=3)
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - -
-# calc cumulative log returns
-
-garch_fcast_cumulative <- numeric(5)
-prev_ret <- 0
-
-for (idx in 1:5) {
-    ret <- fitted(garch_fcast)[idx] + prev_ret
-    garch_fcast_cumulative[idx] <- ret
-    prev_ret <- prev_ret + fitted(garch_fcast)[idx]
-}
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - -
-# generate prediction quantiles assuming normal distribution using GARCH sigma's
-
-# initialize matrix (rows are quantile levels, cols are horizons)
-pred_garch_stdnorm <- matrix(NA, nrow = length(tau_arr), ncol = 5)
-
-# loop over 5 fcast horizons
-for (jj in 1:5){ 
-    for (tau_idx in seq_along(tau_arr)) {
-        
-        sd <- qnorm(tau_arr[tau_idx]) * sigma(garch_fcast)[jj]
-        pred <- garch_fcast_cumulative[jj] + sd
-        pred_garch_stdnorm[tau_idx,jj] <- pred
-        
-    }
-}
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - -
-# USE DIFFERENT PARAMETRIC DISTRIBUTIONS !!!
-
-# initialize matrix (rows are quantile levels, cols are horizons)
-pred_garch_tdist <- matrix(NA, nrow = length(tau_arr), ncol = 5)
-
-# loop over 5 fcast horizons
-for (jj in 1:5){ 
-    for (tau_idx in seq_along(tau_arr)) {
-        
-        sd <- qnorm(tau_arr[tau_idx]) * sigma(garch_fcast)[jj]
-        pred <- garch_fcast_cumulative[jj] + sd
-        pred_garch_stdnorm[tau_idx,jj] <- pred
-        
-    }
-}
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# baseline model ####
-# compute baseline predictions (rolling window)
-
-# initialize matrix (rows are quantile levels, cols are horizons)
-pred_baseline <- matrix(NA, nrow = length(tau_arr), ncol = 5)
-n_past_values <- 100
-
-# loop over 5 fcast horizons
-for (jj in 1:5){ 
-
-    tmp <- DAX_returns_train[, paste0("ret", jj)] %>% 
-        na.omit %>% # removes any rows
-        tail(n_past_values) # selects only #n values in tail
-    
-    # return quantiles at the specified probabilities given
-    pred_baseline[,jj] <- quantile(tmp, probs = tau_arr)
-    
-}
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = =
-# calculate q score #### 
+# helper functions ####
 
 qscore <- function(pred, y, quantile) {
     if (pred > y) {
@@ -274,13 +84,6 @@ qscore <- function(pred, y, quantile) {
     }
 }
 
-# get "future" actual data
-DAX_returns_true <- DAX_returns[(n_train+1):(n_train+5), ]
-DAX_cumul_ret_true <- c(DAX_returns_true$ret1[1],
-                        DAX_returns_true$ret2[2],
-                        DAX_returns_true$ret3[3],
-                        DAX_returns_true$ret4[4],
-                        DAX_returns_true$ret5[5])
 
 calculate_qscore_matrix <- function(pred_mat, y_vec, quantiles) {
     n <- ncol(pred_mat)
@@ -315,26 +118,377 @@ calculate_qscore_matrices <- function(pred_mat, y_vec, quantiles) {
     return(ret_list)
 }
 
-preds <- list(pred_baseline, pred_garch_stdnorm)
-preds <- c(preds, pred_quant_reg_list)
-
-quant_reg_names <- sapply(input_vectors, function(x) paste('quant_reg :', paste(x, collapse = ' + ')))
-model_names <- c("baseline", "garch_stdnorm", quant_reg_names)
-
-mean_scores <- numeric(length(preds))
-# Calculate mean scores and store names
-for (i in seq_along(preds)){
-    qscore_mat <- calculate_qscore_matrix(preds[[i]], DAX_cumul_ret_true, tau_arr)
-    mean_scores[i] <- mean(qscore_mat)
+# Function to check if a vector is strictly ascending
+is_ascending <- function(x) {
+    all(diff(x) > 0)
 }
 
-result_df <- data.frame(Model = model_names, Mean_Score = mean_scores)
+# Function to reorder matrix rows based on quantile crossing
+reorder_rows <- function(mat) {
+    n <- ncol(mat)
+    for (i in 1:n) {
+        if (!is_ascending(mat[, i])) {
+            mat[, i] <- sort(mat[, i])
+        }
+    }
+    return(mat)
+}
+
+gen_quant_reg_pred <- function(input_vector, return_variables, tau_arr, train_data) {
+    
+    rqfit_list <- list()
+    
+    for (ret_var in return_variables) {
+        formula <- paste(ret_var, "~", paste(input_vector, collapse=" + "))
+        rqfit_ret <- rq(formula, tau = tau_arr, data = DAX_returns_train)
+        rqfit_list[[ret_var]] <- rqfit_ret
+    }
+    
+    DAX_returns_train <- DAX_returns_train %>%
+        mutate(
+            pred_ret1 = predict(rqfit_list$ret1, newdata = ., interval = "confidence"),
+            pred_ret2 = predict(rqfit_list$ret2, newdata = ., interval = "confidence"),
+            pred_ret3 = predict(rqfit_list$ret3, newdata = ., interval = "confidence"),
+            pred_ret4 = predict(rqfit_list$ret4, newdata = ., interval = "confidence"),
+            pred_ret5 = predict(rqfit_list$ret5, newdata = ., interval = "confidence")
+        )
+    
+    pred_ret <- t(rbind(DAX_returns_train$pred_ret1[n_train-4,], 
+                        DAX_returns_train$pred_ret2[n_train-3,], 
+                        DAX_returns_train$pred_ret3[n_train-2,],
+                        DAX_returns_train$pred_ret4[n_train-1,], 
+                        DAX_returns_train$pred_ret5[n_train,]))
+    
+    return(pred_ret)
+    
+}
+
+# = = = = = = = = = = = = = = = = = = = = = = = = = =
+# start and end dates ####
+
+start_date <- as.Date("2023-11-15")
+end_date <- as.Date("2024-02-14")
+
+# Generate a sequence of Wednesdays
+wednesdays <- seq(start_date, end_date, by="week")
+wednesdays <- wednesdays[format(wednesdays, "%u") == "3"]  # Filter only Wednesdays
+
+# = = = = = = = = = = = = = = = = = = = = = = = = = =
+# main loop over weeks ####
+
+cwd <- getwd()
+if (comp == 'surface') { homedir <- "C:/2023_11-PTSFC" }
+setwd(homedir)
+
+prefix <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
+dirname <- paste0(prefix, " dax res")
+print(paste0("saving to: ", dirname))
+
+dir.create(dirname)
+setwd(dirname)
+
+# saving true values for comparison at end
+truevals_output_df <- data.frame()
+all_model_scores_df <- data.frame()
+
+# Record start time
+start_time_full <- Sys.time()
+
+for (week_idx in seq_along(wednesdays[1:2])){
+    
+    # Record start time
+    start_time <- Sys.time()
+    
+    fcast_date <- wednesdays[[week_idx]]
+    # get dates of thursday, friday, monday, tuesday, wednesday
+    subm_dates <- seq(fcast_date, by="day", length.out=8) 
+    # remove weekend + first day
+    subm_dates <- c(subm_dates[2:3],subm_dates[6:8])
+    
+    cat(paste(rep("=", 30)), "\n")
+    print(paste0("start fcast week ", week_idx, "/", length(wednesdays), ", fcast on ", fcast_date))
+    
+    DAX_returns_train <- DAX_returns %>%
+        filter(date <= fcast_date) 
+    
+    n_train <- nrow(DAX_returns_train)
+    
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # fit distribution ####
+    
+    ghyp_fits_list <- list()
+    tdist_fits_list <- list()
+    
+    for (i in 1:5) {
+        
+        data <- DAX_returns_train[[paste0("ret", i)]]
+        
+        # fit gen hyp PDF
+        ghyp_fit <- fit.ghypuv(data, lambda = 1, alpha.bar = 0.5, mu = median(data),
+                               sigma = mad(data), gamma = 0, silent = TRUE)
+        ghyp_fits_list[[i]] <- ghyp_fit
+        
+        # fit student's t-distribution PDF
+        t_fit <- fitdistr(data, "t", start=list(m=mean(data),s=sd(data),df=1), lower=c(-1, 0.001,1))
+        tdist_fits_list[[i]] <- t_fit
+        
+    }
+    
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # quant reg models ####
+    
+    return_variables <- c("ret1", "ret2", "ret3", "ret4", "ret5")
+    
+    lag1_colnames <- grep("lag1", colnames(DAX_returns), value = TRUE)
+    combinations <- combn(lag1_colnames, 2, simplify = FALSE) # return as vector
+    
+    input_vectors <- list(c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
+                          c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret1_abs_lag1"),
+                          c("ret1_sqrd_lag1", "ret1_abs_lag1", "ret2_abs_lag1"),
+                          
+                          c("ret1_sqrd_lag1","ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
+                          
+                          c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1", "ret4_sqrd_lag1", "ret5_sqrd_lag1"),
+                          c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1", "ret4_sqrd_lag1"),
+                          c("ret1_sqrd_lag1", "ret2_sqrd_lag1", "ret3_sqrd_lag1"),
+                          
+                          c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1", "ret5_abs_lag1"),
+                          c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1", "ret4_abs_lag1"),
+                          c("ret1_abs_lag1", "ret2_abs_lag1", "ret3_abs_lag1"))
+    
+    input_vectors <- c(input_vectors, combinations)
+    
+    preds_quant_reg_list <- list()
+    
+    for (i in seq_along(input_vectors)) {
+    
+        pred_quant_reg <- gen_quant_reg_pred(input_vectors[[i]], return_variables, 
+                                             tau_arr, DAX_returns_train)
+        preds_quant_reg_list[[i]] <- pred_quant_reg
+        
+    }
+    
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # Check Quantile Crossing
+    
+    # Reorder rows if quantile crossing is detected 
+    # for all prediction matrices in preds_quant_reg_list
+    
+    for (pred_idx in seq_along(preds_quant_reg_list)) {
+        preds_quant_reg_list[[pred_idx]] <- reorder_rows(preds_quant_reg_list[[pred_idx]])
+    }
+    
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # fit ARMA GARCH ####
+    
+    # sGARCH = standard GARCH
+    spec_garch  <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(3,1)), 
+                              mean.model = list(armaOrder = c(6, 6)))
+    
+    garch_model <- ugarchfit(spec_garch, DAX_returns_train[2:n_train,5])
+    garch_fcast <- ugarchforecast(garch_model, n.ahead=5)
+    
+    # - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # calc cumulative log returns
+    
+    garch_fcast_cumulative <- numeric(5)
+    prev_ret <- 0
+    
+    for (idx in 1:5) {
+        ret <- fitted(garch_fcast)[idx] + prev_ret
+        garch_fcast_cumulative[idx] <- ret
+        prev_ret <- prev_ret + fitted(garch_fcast)[idx]
+    }
+    
+    # - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # generate prediction quantiles assuming normal distribution 
+    # using GARCH sigma's
+    
+    # initialize matrix (rows are quantile levels, cols are horizons)
+    pred_garch_norm <- matrix(NA, nrow = length(tau_arr), ncol = 5)
+    
+    # loop over 5 fcast horizons
+    for (jj in 1:5){ 
+        for (tau_idx in seq_along(tau_arr)) {
+            
+            sd <- qnorm(tau_arr[tau_idx]) * sigma(garch_fcast)[jj]
+            pred <- garch_fcast_cumulative[jj] + sd
+            pred_garch_norm[tau_idx,jj] <- pred
+            
+        }
+    }
+    
+    # - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # USE DIFFERENT PARAMETRIC DISTRIBUTIONS !!!
+    
+    # initialize matrix (rows are quantile levels, cols are horizons)
+    pred_garch_tdist <- matrix(NA, nrow = length(tau_arr), ncol = 5)
+    
+    # loop over 5 fcast horizons
+    for (jj in 1:5){
+        
+        t_fit <- tdist_fits_list[[jj]]
+        m <- coef(t_fit)[[1]]
+        s <- coef(t_fit)[[2]]
+        df <- coef(t_fit)[[3]]
+        
+        for (tau_idx in seq_along(tau_arr)) {
+        
+            sd <- qt(tau_arr[tau_idx], ncp=m/s, df=df) # * sigma(garch_fcast)[jj]
+            pred <- garch_fcast_cumulative[jj] + sd
+            pred_garch_tdist[tau_idx,jj] <- pred
+            
+        }
+    }
+    
+    # - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # USE DIFFERENT PARAMETRIC DISTRIBUTIONS !!!
+    
+    # initialize matrix (rows are quantile levels, cols are horizons)
+    pred_garch_genhyp <- matrix(NA, nrow = length(tau_arr), ncol = 5)
+    
+    # loop over 5 fcast horizons
+    for (jj in 1:5){
+        
+        ghyp_fit <- ghyp_fits_list[[jj]]
+        
+        for (tau_idx in seq_along(tau_arr)) {
+            
+            sd <- qghyp(tau_arr[tau_idx], object=ghyp_fit) # * sigma(garch_fcast)[jj]
+            pred <- garch_fcast_cumulative[jj] + sd
+            pred_garch_genhyp[tau_idx,jj] <- pred
+            
+        }
+    }
+        
+    # - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # SAVE ALL IN LIST
+    
+    preds_garch_list <- c(pred_garch_norm, pred_garch_tdist, pred_garch_genhyp)
+    
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # baseline model ####
+    # compute baseline predictions (rolling window)
+    
+    baseline_lookbacks <- c(700, 500, 400, 300, 200, 100, 50)
+    preds_bench_list <- list()
+    
+    for ( baseline_idx in seq_along(baseline_lookbacks) ) {
+        
+        n_past_values <- baseline_lookbacks[baseline_idx]
+        
+        # initialize matrix (rows are quantile levels, cols are horizons)
+        pred_baseline <- matrix(NA, nrow = length(tau_arr), ncol = 5)
+        
+        # loop over 5 fcast horizons
+        for (jj in 1:5){ 
+            tmp <- DAX_returns_train[, paste0("ret", jj)] %>% 
+                na.omit %>% # removes rows with na
+                tail(n_past_values) # selects only #n values in tail
+            # return quantiles at the specified probabilities given
+            pred_baseline[,jj] <- quantile(tmp, probs = tau_arr)
+        }
+        preds_bench_list[[ baseline_idx ]] <- pred_baseline
+    }
+    
+
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # calculate q score #### 
+    
+    # get "future" actual data
+    DAX_returns_true <- DAX_returns[(n_train+1):(n_train+5), ]
+    DAX_cumul_ret_true <- c(DAX_returns_true$ret1[1],
+                            DAX_returns_true$ret2[2],
+                            DAX_returns_true$ret3[3],
+                            DAX_returns_true$ret4[4],
+                            DAX_returns_true$ret5[5])
+    
+    # save weekly true values to main df outside loop
+    weekly_true_df <- data.frame(DAX_cumul_ret_true, row.names=subm_dates)
+    truevals_output_df <- rbind(truevals_output_df, weekly_true_df)
+    
+    preds <- c(preds_bench_list, preds_garch_list)
+    preds <- c(preds, preds_quant_reg_list)
+    
+    quant_reg_names <- sapply(input_vectors, function(x) paste('quant_reg :', paste(x, collapse = ' + ')))
+    model_names <- c("baseline", "garch_stdnorm", quant_reg_names)
+
+    mean_scores <- numeric(length(preds))
+    fcasts_output_df <- data.frame()
+        
+    # Calculate mean scores and store names
+    for (i in seq_along(preds)){
+        
+        qscore_mat <- calculate_qscore_matrix(preds[[i]], DAX_cumul_ret_true, tau_arr)
+        mean_scores[i] <- mean(qscore_mat)
+
+        # transpose preds such that rows are timestamps
+        preds_transpose <- data.frame(t(preds[[i]]))
+        colnames(preds_transpose) <- paste0('q', tau_arr)
+        # add column with model_name
+        # add column with fcast index 1,2,3,4,5
+        preds_transpose$model_name <- rep(model_names[[i]], 5)
+        preds_transpose$fcast_target_date <- subm_dates
+        # Combine with fcasts_output_df
+        fcasts_output_df <- rbind(fcasts_output_df, preds_transpose)
+        
+    }
+    
+    result_df <- data.frame(Model = model_names, Mean_Score = mean_scores)
+
+    # Check if all_model_scores_df is empty
+    if (nrow(all_model_scores_df) == 0) {
+        all_model_scores_df <- result_df
+        colnames(all_model_scores_df) <- c("Model", paste0(fcast_date))
+    } else {
+        old_colnames <- colnames(all_model_scores_df)
+        all_model_scores_df <- cbind(all_model_scores_df, result_df[,-1])
+        colnames(all_model_scores_df) <- c(old_colnames, paste0(fcast_date))
+    }
+    
+    # print ordered results
+    result_df <- result_df[order(result_df$Mean_Score), ]
+    result_df <- result_df[, c("Mean_Score", "Model")]
+    rownames(result_df) <- NULL
+    print(result_df[1:5,], right=FALSE)
+    
+    # = = = = = = = = = = = = = = = = = = = = = = = = = =
+    # save to dir #### 
+
+    csv_filename <- paste0("dax_weekly_fcasts_", week_idx, ".csv")
+    write.csv(fcasts_output_df, csv_filename, row.names = FALSE)
+    
+    # Calculate time taken
+    end_time <- Sys.time()
+    time_taken <- end_time - start_time
+    cat("Time taken for this iteration:", round(time_taken, 2), "\n")
+    
+}
+
+# 1 big csv of all true values at submission timestamps 
+write.csv(truevals_output_df, "dax_truevals.csv", row.names=TRUE)
+
+setwd(cwd)
+
+# Calculate time taken
+end_time <- Sys.time()
+time_taken <- end_time - start_time_full
+cat("Total time taken:", time_taken, "\n")
+
+# = = = = = = = = = = = = = = = = = = = = = = = = = =
+# simple eval : best model #### 
+
+# Take the mean along rows (axis=1)
+mean_scores <- rowMeans(all_model_scores_df[, -1])
+
+# Create a new data frame with Model column and Mean_Score column
+result_df <- data.frame(Model = all_model_scores_df$Model, Mean_Score = mean_scores)
+
+# Sort the data frame by Mean_Score in ascending order
 result_df <- result_df[order(result_df$Mean_Score), ]
 
-# for each week
-# need to save fcasts
-# need to save true values
+# Reset row names
+rownames(result_df) <- NULL
 
-# 2 csv files for each week
-# index = timestamp
-# cols = modelname (eg quant_reg), quantiles
+# Print the sorted result_df
+print(result_df)

@@ -94,6 +94,9 @@ n_train <- nrow(DAX_returns_train)
 # = = = = = = = = = = = = = = = = = = = = = = = = = =
 # Check Distribution
 
+ghyp_fits_list <- list()
+tdist_fits_list <- list()
+
 for (i in 1:5) {
     
     data <- DAX_returns_train[[paste0("ret", i)]]
@@ -106,12 +109,19 @@ for (i in 1:5) {
     # Plot fitted gen hyp PDF
     ghyp_fit <- fit.ghypuv(data, lambda = 1, alpha.bar = 0.5, mu = median(data),
                            sigma = mad(data), gamma = 0, silent = TRUE)
-    curve(dghyp(x, object = ghyp_fit, logvalue = FALSE), col="orange", add = TRUE, n=500)
-    # Plot standard normal distribution PDF
-    curve(dnorm(x, mean=0, sd=1), col="green", lwd=1, add = TRUE, n=500)
+    ghyp_fits_list[[i]] <- ghyp_fit
+    curve(dghyp(x, object=ghyp_fit, logvalue=FALSE), col="orange", add = TRUE, n=500)
+    
     # Plot fitted normal distribution PDF
     curve(dnorm(x, mean = mean(data), sd = sd(data)), col="green", lwd=1, add = TRUE, n=500)
+    
     # Plot Student's t-distribution PDF
-    curve(dt(x, df=10), col = "red", lwd=1, add = TRUE, n=500)
+    t_fit <- fitdistr(data, "t", start=list(m=mean(data),s=sd(data),df=1), lower=c(-1, 0.001,1))
+    tdist_fits_list[[i]] <- t_fit
+    
+    m <- coef(t_fit)[[1]]
+    s <- coef(t_fit)[[2]]
+    df <- coef(t_fit)[[3]]
+    curve(dt(x, ncp=m/s, df=1), col="red", lwd=1, add = TRUE, n=500)
     
 }
