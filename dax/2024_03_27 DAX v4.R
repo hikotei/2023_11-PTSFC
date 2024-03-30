@@ -289,7 +289,7 @@ for (week_idx in seq_along(wednesdays)){
         dist <- garch_dists[dist_idx]
         # sGARCH = standard GARCH
         spec_garch  <- ugarchspec(variance.model = list(model="sGARCH", garchOrder=c(3,1)), 
-                                  mean.model = list(armaOrder = c(6, 6)), 
+                                  mean.model = list(armaOrder = c(6, 6)),
                                   distribution.model = dist)
         
         garch_model <- ugarchfit(spec_garch, DAX_returns_train[2:n_train,3])
@@ -380,7 +380,7 @@ for (week_idx in seq_along(wednesdays)){
     
     quant_reg_names <- sapply(input_vectors, function(x) paste('quant_reg :', paste(x, collapse = ' + ')))
     garch_names <- paste0('garch_', garch_dists)
-    bench_names <- paste('bench_', bench_lookbacks)
+    bench_names <- paste0('bench_', bench_lookbacks)
     model_names <- c(bench_names,  garch_names, quant_reg_names)
 
     mean_scores <- numeric(length(preds))
@@ -425,7 +425,7 @@ for (week_idx in seq_along(wednesdays)){
     # = = = = = = = = = = = = = = = = = = = = = = = = = =
     # save to dir #### 
 
-    csv_filename <- paste0("dax_weekly_fcasts_", week_idx, ".csv")
+    csv_filename <- paste0("dax_weekly_fcasts_", fcast_date, ".csv")
     write.csv(fcasts_output_df, csv_filename, row.names = FALSE)
     
     # Calculate time taken

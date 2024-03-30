@@ -212,3 +212,14 @@ def eval_fcast_qscore(df_fcast, df_energy_new, subm_timestamps, quantiles):
 
     return df_error_metrics
 
+def eval_fcast_qscore_dax(df_fcast, actual_df, subm_timestamps, quantiles):
+
+    df_error_metrics = pd.DataFrame(index=subm_timestamps)
+    for timestamp in subm_timestamps:
+        for q in quantiles:
+            quantile_score = mean_pinball_loss(actual_df.loc[timestamp], [df_fcast.loc[timestamp, f"q{q}"]], alpha=q) * 2
+            # save in df
+            df_error_metrics.loc[timestamp, f"q-score {q:.3f}"] = quantile_score
+
+    return df_error_metrics
+
